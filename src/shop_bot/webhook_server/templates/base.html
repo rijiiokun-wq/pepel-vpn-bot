@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="ru">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<title>{% block title %}Панель управления Ботом{% endblock %}</title>
+		<link
+			rel="stylesheet"
+			href="{{ url_for('static', filename='css/style.css') }}?v={{ config.APP_VERSION }}-dashboard-20260905"
+		/>
+		{% if request.endpoint == 'dashboard_page' %}<script defer src="{{ url_for('static', filename='vendor/chart.umd.min.js') }}?v=4.4.7"></script>{% endif %}
+		{% block extra_head %}{% endblock %}
+	</head>
+	<body class="admin-shell">
+		{% set restricted = panel_restricted | default(false) %}
+		<div class="container">
+			<header class="main-header">
+				<nav class="navigation">
+					{% if panel_can_access is not defined or panel_can_access('dashboard') %}
+					<a
+						href="{{ url_for('dashboard_page') }}"
+						class="nav-link {% if request.endpoint == 'dashboard_page' %}active{% endif %}"
+						>Dashboard</a
+					>
+					{% endif %}
+					{% if finance_enabled | default(false) and (panel_can_access is not defined or panel_can_access('finance')) %}<a href="{{ url_for('finance_page') }}" class="nav-link {% if request.endpoint == 'finance_page' %}active{% endif %}">Финансы</a>{% endif %}
+					{% if panel_can_access is not defined or panel_can_access('referrals') %}
+					<a href="{{ url_for('referrals_page') }}" class="nav-link {% if request.endpoint in ('referrals_page', 'referral_settings_route', 'referral_withdrawal_route') %}active{% endif %}">Рефералы</a>
+					{% endif %}
+					{% if not restricted %}
+					<a
+						href="{{ url_for('users_page') }}"
+						class="nav-link {% if request.endpoint == 'users_page' %}active{% endif %}"
+						>Пользователи</a
+					>
+					<a
+						href="{{ url_for('settings_page') }}"
+						class="nav-link {% if request.endpoint == 'settings_page' %}active{% endif %}"
+						>Настройки</a
+					>
+						<a
+							href="{{ url_for('migration_page') }}"
+							class="nav-link {% if request.endpoint in ('migration_page', 'issue_by_id_page') %}active{% endif %}"
+							>Миграция</a
+						>
+					{% endif %}
+					</nav>
+
+				<div class="header-controls">
+					{% if not restricted %}
+						<div class="header-bots">
+							{% set shop_running = bot_status.get('shop_bot_running', False) %}
+							<div class="bot-pill {% if shop_running %}bot-pill--running{% else %}bot-pill--stopped{% endif %}">
+								<span class="bot-pill-dot"></span>
+								<span class="bot-pill-label">Shop</span>
+								{% if shop_running %}
+								{% if allow_runtime_stop %}
+								<form action="{{ url_for('stop_shop_bot_route') }}" method="post">
+									<button type="submit" class="bot-pill-btn bot-pill-btn--stop" title="Остановить">&#x25A0;</button>
+								</form>
+								{% else %}
+								<button class="bot-pill-btn bot-pill-btn--disabled" disabled title="Always-on: остановка отключена">&#x25A0;</button>
+								{% endif %}
+							{% elif all_settings_ok %}
+							<form action="{{ url_for('start_shop_bot_route') }}" method="post">
+								<button type="submit" class="bot-pill-btn bot-pill-btn--start" title="Запустить">&#x25B6;</button>
+							</form>
+							{% else %}
+							<button class="bot-pill-btn bot-pill-btn--disabled" disabled title="Заполните настройки">&#x25B6;</button>
+							{% endif %}
+							</div>
+
+							{% if runtime_bot_source == 'reserve' %}
+							<div class="bot-pill {% if shop_running %}bot-pill--running{% else %}bot-pill--stopped{% endif %}">
+								<span class="bot-pill-dot"></span>
+								<span class="bot-pill-label">Reserve</span>
+								{% if shop_running %}
+								{% if allow_runtime_stop %}
+								<form action="{{ url_for('stop_shop_bot_route') }}" method="post">
+									<button type="submit" class="bot-pill-btn bot-pill-btn--stop" title="Остановить">&#x25A0;</button>
+								</form>
+								{% else %}
+								<button class="bot-pill-btn bot-pill-btn--disabled" disabled title="Always-on: остановка отключена">&#x25A0;</button>
+								{% endif %}
+							{% elif all_settings_ok %}
+							<form action="{{ url_for('start_shop_bot_route') }}" method="post">
+								<button type="submit" class="bot-pill-btn bot-pill-btn--start" title="Запустить">&#x25B6;</button>
+							</form>
+							{% else %}
+							<button class="bot-pill-btn bot-pill-btn--disabled" disabled title="Заполните настройки">&#x25B6;</button>
+							{% endif %}
+						</div>
+							{% elif global_settings.reserve_bot_token %}
+							{% set reserve_status = reserve_runtime_status or {} %}
+							{% set reserve_running = reserve_status.get('shop_bot_running', False) %}
+							{% set reserve_healthy = reserve_status.get('shop_bot_healthy', reserve_running) %}
+							{% set reserve_live = reserve_running and reserve_healthy %}
+							{% set reserve_ready = reserve_status.get('all_settings_ok', False) %}
+							{% set reserve_hint = reserve_status.get('shop_bot_health_message') or reserve_status.get('message', 'Reserve runtime недоступен') %}
+							<div class="bot-pill {% if reserve_running %}bot-pill--running{% else %}bot-pill--stopped{% endif %}">
+								<span class="bot-pill-dot"></span>
+								<span class="bot-pill-label">Reserve</span>
+								{% if reserve_running %}
+								{% if allow_runtime_stop %}
+								<form action="{{ url_for('stop_reserve_bot_route') }}" method="post">
+									<button type="submit" class="bot-pill-btn bot-pill-btn--stop" title="Остановить">&#x25A0;</button>
+							</form>
+							{% else %}
+							<button class="bot-pill-btn bot-pill-btn--disabled" disabled title="Always-on: остановка отключена">&#x25A0;</button>
+							{% endif %}
+							{% elif reserve_ready %}
+							<form action="{{ url_for('start_reserve_bot_route') }}" method="post">
+								<button type="submit" class="bot-pill-btn bot-pill-btn--start" title="Запустить">&#x25B6;</button>
+							</form>
+							{% else %}
+							<button class="bot-pill-btn bot-pill-btn--disabled" disabled title="{{ reserve_hint }}">&#x25B6;</button>
+							{% endif %}
+						</div>
+						{% endif %}
+
+						<div class="bot-pill {% if bot_status.support_bot_running or bot_status.chatwoot_enabled %}bot-pill--running{% else %}bot-pill--stopped{% endif %}">
+							<span class="bot-pill-dot"></span>
+							<span class="bot-pill-label">
+								{% if bot_status.chatwoot_enabled %}Chatwoot{% else %}Support{% endif %}
+								{% if bot_status.support_bot_running and bot_status.chatwoot_enabled %}
+								<small class="bot-pill-warn">legacy</small>
+								{% endif %}
+							</span>
+							{% if bot_status.support_bot_running %}
+							<form action="{{ url_for('stop_support_bot_route') }}" method="post">
+								<button type="submit" class="bot-pill-btn bot-pill-btn--stop" title="Остановить">&#x25A0;</button>
+							</form>
+							{% elif bot_status.chatwoot_enabled %}
+								{% if global_settings.chatwoot_api_url %}
+								<a href="{{ global_settings.chatwoot_api_url }}" target="_blank" class="bot-pill-btn bot-pill-btn--link" title="Открыть Chatwoot">&#x2197;</a>
+								{% endif %}
+							{% else %}
+							<form action="{{ url_for('start_support_bot_route') }}" method="post">
+								<button type="submit" class="bot-pill-btn bot-pill-btn--start" title="Запустить">&#x25B6;</button>
+							</form>
+							{% endif %}
+						</div>
+					</div>
+					{% endif %}
+
+					<form action="{{ url_for('logout_page') }}" method="post" class="header-logout">
+						<button type="submit" class="button button-logout">Выйти</button>
+					</form>
+				</div>
+				{% if not restricted %}
+				{% set shop_watchdog_paused = bot_status.shop_autorestart_paused and bot_status.shop_last_failure %}
+				{% if shop_watchdog_paused %}
+				<div class="shop-watchdog-alert" role="status" aria-live="polite">
+					<div class="shop-watchdog-alert-title">
+						⚠️ Shop watchdog: авто‑перезапуск на паузе
+					</div>
+					<div class="shop-watchdog-alert-body">
+						<div><strong>Причина:</strong> {{ bot_status.shop_last_failure }}</div>
+						{% if bot_status.shop_last_failure_at %}
+						<div><strong>Время:</strong> {{ bot_status.shop_last_failure_at|ru_date }}</div>
+						{% endif %}
+						<div><strong>Что делать:</strong> исправьте причину и запустите Shop вручную кнопкой ▶.</div>
+					</div>
+				</div>
+				{% endif %}
+				{% endif %}
+			</header>
+
+			{% with messages = get_flashed_messages(with_categories=true) %} {% if
+			messages %} {% for category, message in messages %}
+			<div class="flash flash-{{ category }}">{{ message }}</div>
+			{% endfor %} {% endif %} {% endwith %}
+
+			<main class="admin-main">{% block content %}{% endblock %}</main>
+		</div>
+		<script src="{{ url_for('static', filename='js/script.js') }}?v={{ config.APP_VERSION }}-dashboard-20260905"></script>
+	</body>
+</html>

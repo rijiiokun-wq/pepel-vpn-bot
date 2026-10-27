@@ -1,0 +1,17 @@
+{% macro user_link(id, username) -%}
+<a href="{{ url_for('referrals_page', user_id=id, q=query, status=withdrawal_status) }}#participant">{{ '@' ~ username if username else id }}</a>{% if username %}<small>ID {{ id }}</small>{% endif %}
+{%- endmacro %}
+  <div class="referral-scroll"><table class="referral-table"><thead><tr><th>Заявка</th><th>Клиент / бот</th><th>Доставка</th><th>Попытки</th><th>Действия</th></tr></thead><tbody>
+    {% for item in withdrawal_notifications %}<tr data-notification-id="{{ item.id }}" data-notification-status="{{ item.status }}">
+      <td>#{{ item.withdrawal_id }}<small>{{ {'paid':'Выплачена','rejected':'Отклонена'}.get(item.action, item.action) }}</small></td>
+      <td>{{ user_link(item.user_id, item.username) }}<small>{{ item.source }}</small></td>
+      <td><strong>{{ {'pending':'В очереди','sending':'Отправляется','sent':'Отправлено','failed':'Ошибка отправки'}.get(item.status, item.status) }}</strong>{% if item.sent_at %}<small>{{ item.sent_at|referral_date }}</small>{% endif %}{% if item.error %}<small>{{ item.error }}</small>{% endif %}</td>
+      <td>{{ item.attempts }}{% if item.total_attempts is defined %}<small>Всего: {{ item.total_attempts }}</small>{% endif %}</td>
+      <td>{% if item.status == 'failed' %}<form method="post" action="{{ url_for('referral_notification_retry_route', notification_id=item.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}" /><button type="submit" class="button referral-button">Повторить отправку</button></form>{% elif item.status == 'pending' %}Ожидает отправки{% if item.attempts and item.next_retry_at %}<small>Повторная попытка: {{ item.next_retry_at|referral_date }}</small>{% endif %}{% elif item.status == 'sent' %}Telegram принял сообщение{% else %}—{% endif %}</td>
+    </tr>{% else %}<tr><td colspan="5">Уведомлений пока нет. Они появятся после решения по новой заявке.</td></tr>{% endfor %}
+  </tbody></table></div>
+  <nav class="referral-pagination" aria-label="Страницы уведомлений">
+    {% if notification_page > 1 %}<a href="{{ url_for('referrals_page', q=query, status=withdrawal_status, notification_page=notification_page-1) }}#notifications">← Назад</a>{% endif %}
+    <span>Страница {{ notification_page }}</span>
+    {% if has_more_notifications %}<a href="{{ url_for('referrals_page', q=query, status=withdrawal_status, notification_page=notification_page+1) }}#notifications">Далее →</a>{% endif %}
+  </nav>

@@ -1,0 +1,336 @@
+{% extends "base.html" %} {% block title %}Управление Пользователями{% endblock
+%} {% block content %}
+
+<section class="admin-page-head">
+	<h1>Пользователи</h1>
+	<p class="settings-page-intro admin-page-intro">
+		Фильтруйте базу, открывайте историю пользователя и управляйте доступом без
+		переключения между экранами.
+	</p>
+</section>
+
+<section
+	class="settings-section admin-section-card users-page-panel"
+	data-live-signature-endpoint="{{ url_for('users_live_signature_api') }}"
+	data-live-signature="{{ users_live_signature }}"
+	data-live-poll-ms="20000"
+>
+	<h2>Список пользователей</h2>
+	<div class="users-toolbar">
+		<form class="users-search-form users-filters-form" method="get" action="{{ url_for('users_page') }}">
+			<div class="users-filter-grid">
+				<label class="users-filter-field users-filter-field--search">
+					<span class="users-filter-label">Поиск</span>
+					<input
+						type="text"
+						name="q"
+						class="search-input"
+						placeholder="ID, username или key_email..."
+						value="{{ search_query or '' }}"
+						autocomplete="off"
+					/>
+				</label>
+				<label class="users-filter-field">
+					<span class="users-filter-label">Статус бота</span>
+					<select name="bot_status" class="search-select">
+						<option value="all" {{ 'selected' if bot_status_filter == 'all' else '' }}>Все</option>
+						<option value="allowed" {{ 'selected' if bot_status_filter == 'allowed' else '' }}>Разрешен</option>
+						<option value="banned" {{ 'selected' if bot_status_filter == 'banned' else '' }}>Заблокирован</option>
+					</select>
+				</label>
+				<label class="users-filter-field">
+					<span class="users-filter-label">VPN</span>
+					<select name="vpn_status" class="search-select">
+						<option value="all" {{ 'selected' if vpn_status_filter == 'all' else '' }}>Все</option>
+						<option value="with_keys" {{ 'selected' if vpn_status_filter == 'with_keys' else '' }}>Есть ключи</option>
+						<option value="without_keys" {{ 'selected' if vpn_status_filter == 'without_keys' else '' }}>Нет ключей</option>
+						<option value="expired" {{ 'selected' if vpn_status_filter == 'expired' else '' }}>Просроченные</option>
+					</select>
+				</label>
+				<label class="users-filter-field">
+					<span class="users-filter-label">Хост</span>
+					<select name="host" class="search-select">
+						<option value="">Все хосты</option>
+						{% for host in hosts %}
+						<option value="{{ host }}" {{ 'selected' if selected_host == host else '' }}>{{ host }}</option>
+						{% endfor %}
+					</select>
+				</label>
+				<label class="users-filter-field">
+					<span class="users-filter-label">С даты</span>
+					<input type="date" name="reg_from" class="search-date" value="{{ reg_from or '' }}" />
+				</label>
+				<label class="users-filter-field">
+					<span class="users-filter-label">По дату</span>
+					<input type="date" name="reg_to" class="search-date" value="{{ reg_to or '' }}" />
+				</label>
+				<label class="users-filter-field">
+					<span class="users-filter-label">Сортировка</span>
+					<select name="sort" class="search-select">
+						<option value="registration_desc" {{ 'selected' if sort_by == 'registration_desc' else '' }}>Новые сверху</option>
+						<option value="registration_asc" {{ 'selected' if sort_by == 'registration_asc' else '' }}>Старые сверху</option>
+						<option value="spent_desc" {{ 'selected' if sort_by == 'spent_desc' else '' }}>Потрачено ↓</option>
+						<option value="spent_asc" {{ 'selected' if sort_by == 'spent_asc' else '' }}>Потрачено ↑</option>
+						<option value="key_count_desc" {{ 'selected' if sort_by == 'key_count_desc' else '' }}>Ключи ↓</option>
+						<option value="key_count_asc" {{ 'selected' if sort_by == 'key_count_asc' else '' }}>Ключи ↑</option>
+					</select>
+				</label>
+			</div>
+				<div class="users-toolbar-footer">
+					<div class="users-toolbar-actions">
+						<button type="submit" class="button button-primary users-toolbar-apply">Применить</button>
+						{% if has_filters %}
+						<a href="{{ url_for('users_page') }}" class="button button-small button-reset">Сбросить все</a>
+						{% endif %}
+						<button
+							type="button"
+							class="button button-small button-secondary users-whitelist-balance-button"
+							data-whitelist-balance-button
+							data-endpoint="{{ url_for('users_whitelist_balance_api') }}"
+						>
+							Остаток по вайтлистам
+						</button>
+					</div>
+					<aside class="users-toolbar-summary">
+					<span class="users-toolbar-summary-label">Показано</span>
+					<div class="users-toolbar-summary-value">
+						<strong>{{ shown_count }}</strong>
+						<span>из {{ total_users }}</span>
+					</div>
+					<div class="users-toolbar-summary-meta">
+						{% if has_filters %}
+						Всего в базе: <strong>{{ total_users_all }}</strong>
+						{% else %}
+							Текущая выборка списка пользователей
+							{% endif %}
+						</div>
+					</aside>
+				</div>
+				<div class="live-sync-bar">
+					<span class="live-sync-status" data-live-sync-status>Проверяю свежесть данных…</span>
+					<button type="button" class="button button-small button-reset live-sync-refresh" data-live-sync-refresh>
+						Обновить
+					</button>
+				</div>
+				<div class="users-whitelist-balance-panel" data-whitelist-balance-panel hidden></div>
+			</form>
+		</div>
+	{% if active_filters %}
+	<div class="active-filters">
+		{% for item in active_filters %}
+		<span class="filter-chip"><strong>{{ item.label }}:</strong> {{ item.value }}</span>
+		{% endfor %}
+	</div>
+	{% endif %}
+	{% if users %}
+	<div class="table-scroll-shell">
+		<table class="users-table">
+				<thead>
+					<tr>
+						<th>Telegram ID</th>
+						<th>Username</th>
+						<th>Доступ в бот</th>
+						<th>VPN</th>
+						<th>Регистрация</th>
+						<th class="actions-cell">Действия</th>
+					</tr>
+				</thead>
+			<tbody>
+				{% for user in users %}
+				<tr>
+					<td>
+						<button
+							type="button"
+							class="user-detail-trigger user-detail-trigger-mono"
+							data-user-id="{{ user.telegram_id }}"
+							title="Открыть детали пользователя"
+						>
+							{{ user.telegram_id }}
+						</button>
+					</td>
+					<td>
+						<button
+							type="button"
+							class="user-detail-trigger"
+							data-user-id="{{ user.telegram_id }}"
+							title="Открыть детали пользователя"
+						>
+							@{{ user.username or 'N/A' }}
+						</button>
+					</td>
+						<td>
+							{% if user.is_banned %}
+							<span class="status-badge status-banned">Заблокирован</span>
+							{% else %}
+							<span class="status-badge status-active">Разрешен</span>
+							{% endif %}
+						</td>
+						<td>
+							<span class="status-badge {{ user.vpn_status_class }}">{{ user.vpn_status_label }}</span>
+						</td>
+						<td class="table-date table-mono">{{ user.registration_date | ru_date }}</td>
+					<td class="actions-cell">
+						{% if user.is_banned %}
+						<form
+							action="{{ url_for('unban_user_route', user_id=user.telegram_id) }}"
+							method="post"
+						>
+							<button type="submit" class="button button-start button-small">
+								Разбанить
+							</button>
+						</form>
+						{% else %}
+						<form
+							action="{{ url_for('ban_user_route', user_id=user.telegram_id) }}"
+							method="post"
+							data-confirm="Вы уверены, что хотите забанить этого пользователя? Он не сможет пользоваться ботом."
+						>
+							<button type="submit" class="button button-warning button-small">
+								Бан
+							</button>
+						</form>
+						{% endif %} {% if user.key_count %}
+						<form
+							action="{{ url_for('revoke_keys_route', user_id=user.telegram_id) }}"
+							method="post"
+							data-confirm="ВНИМАНИЕ! Это действие удалит ВСЕ ключи пользователя с серверов. Вы уверены?"
+						>
+							<button type="submit" class="button button-danger button-small">
+								Отозвать
+							</button>
+						</form>
+						{% endif %}
+					</td>
+				</tr>
+				{% endfor %}
+			</tbody>
+		</table>
+	</div>
+	{% if total_pages > 1 %}
+	<nav class="pagination">
+		<a
+			href="{{ url_for('users_page', page=current_page - 1, q=search_query, bot_status=bot_status_filter, vpn_status=vpn_status_filter, reg_from=reg_from, reg_to=reg_to, host=selected_host, sort=sort_by) }}"
+			class="{{ 'disabled' if current_page == 1 else '' }}"
+			>«</a
+		>
+		{% for p in pagination_items %}
+			{% if p is none %}
+			<span class="pagination-ellipsis">...</span>
+			{% else %}
+			<a
+				href="{{ url_for('users_page', page=p, q=search_query, bot_status=bot_status_filter, vpn_status=vpn_status_filter, reg_from=reg_from, reg_to=reg_to, host=selected_host, sort=sort_by) }}"
+				class="{{ 'active' if p == current_page else '' }}"
+				>{{ p }}</a
+			>
+			{% endif %}
+		{% endfor %}
+		<a
+			href="{{ url_for('users_page', page=current_page + 1, q=search_query, bot_status=bot_status_filter, vpn_status=vpn_status_filter, reg_from=reg_from, reg_to=reg_to, host=selected_host, sort=sort_by) }}"
+			class="{{ 'disabled' if current_page == total_pages else '' }}"
+			>»</a
+		>
+	</nav>
+	{% endif %}
+	{% else %}
+	<div class="empty-state">
+		{% if has_filters %}
+			{% if search_query %}
+			Ничего не найдено по запросу «{{ search_query }}»
+			{% else %}
+			По выбранным фильтрам ничего не найдено
+			{% endif %}
+		{% else %}
+		Пользователей пока нет
+		{% endif %}
+	</div>
+	{% endif %}
+</section>
+
+<div id="user-detail-modal" class="user-detail-modal-overlay" hidden>
+	<div class="user-detail-modal" role="dialog" aria-modal="true" aria-labelledby="user-detail-title">
+		<div class="user-detail-modal-header">
+			<h3 id="user-detail-title">Детали пользователя</h3>
+			<button type="button" class="button button-small button-reset" id="user-detail-close">Закрыть</button>
+		</div>
+
+		<div class="user-detail-modal-body">
+			<div class="user-detail-grid">
+				<div class="user-detail-item">
+					<span class="user-detail-label">Telegram ID</span>
+					<span id="detail-telegram-id">—</span>
+				</div>
+				<div class="user-detail-item">
+					<span class="user-detail-label">Username</span>
+					<span id="detail-username">—</span>
+				</div>
+				<div class="user-detail-item">
+					<span class="user-detail-label">Статус</span>
+					<span id="detail-status">—</span>
+				</div>
+				<div class="user-detail-item">
+					<span class="user-detail-label">Потрачено</span>
+					<span id="detail-total-spent">—</span>
+				</div>
+				<div class="user-detail-item">
+					<span class="user-detail-label">Регистрация</span>
+					<span id="detail-registration-date">—</span>
+				</div>
+			</div>
+
+			<div class="user-detail-keys">
+				<h4>Ключи</h4>
+				<p id="user-detail-state" class="user-detail-state">Загрузка...</p>
+				<div class="user-detail-table-scroll" data-table-scroll>
+					<div class="user-detail-keys-wrapper" data-scroll-wrapper>
+						<table class="user-detail-keys-table">
+							<thead>
+								<tr>
+									<th class="actions-cell">KEY_EMAIL</th>
+									<th>Хост</th>
+									<th>Покупка</th>
+									<th>Окончание</th>
+									<th>Источник</th>
+									<th>Статус</th>
+									<th class="actions-cell">Ключ</th>
+								</tr>
+							</thead>
+							<tbody id="user-detail-keys-body"></tbody>
+						</table>
+					</div>
+					<div class="user-detail-scroll-hint" data-scroll-hint hidden>
+						<span class="user-detail-scroll-pill">Горизонтальный скролл</span>
+						<span>Потяните таблицу влево/вправо мышкой или колесом</span>
+					</div>
+				</div>
+			</div>
+
+			<div class="user-detail-transactions">
+				<h4>Оплаты</h4>
+				<div class="user-detail-table-scroll" data-table-scroll>
+					<div class="user-detail-keys-wrapper" data-scroll-wrapper>
+						<table class="user-detail-keys-table">
+							<thead>
+								<tr>
+									<th>Дата</th>
+									<th>Метод</th>
+									<th>Хост</th>
+									<th>План</th>
+									<th>Сумма</th>
+									<th>Источник</th>
+									<th>ID платежа</th>
+								</tr>
+							</thead>
+							<tbody id="user-detail-transactions-body"></tbody>
+						</table>
+					</div>
+					<div class="user-detail-scroll-hint" data-scroll-hint hidden>
+						<span class="user-detail-scroll-pill">Горизонтальный скролл</span>
+						<span>Потяните таблицу влево/вправо мышкой или колесом</span>
+					</div>
+				</div>
+			</div>
+		</div>
+	</div>
+</div>
+
+{% endblock %}

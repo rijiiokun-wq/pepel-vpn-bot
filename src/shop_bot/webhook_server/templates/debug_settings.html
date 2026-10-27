@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="ru">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<title>ОТЛАДКА - Панель управления</title>
+		<link
+			rel="stylesheet"
+			href="{{ url_for('static', filename='css/style.css') }}?v={{ config.APP_VERSION }}"
+		/>
+	</head>
+	<body class="admin-shell">
+		<div class="container">
+			<main class="admin-main">
+				<section class="admin-page-head">
+					<h1>Отладка</h1>
+					<p class="settings-page-intro admin-page-intro">
+						Изолированная страница ручной проверки runtime-состояния и базовых команд управления.
+					</p>
+				</section>
+
+				<section class="admin-section-card debug-panel">
+					<h2>Статус бота</h2>
+					<div class="debug-grid">
+						<div class="debug-card">
+							<span class="user-detail-label">Текущее состояние</span>
+							{% if bot_status.is_running %}
+							<span class="status-badge status-active">Запущен</span>
+							{% else %}
+							<span class="status-badge status-banned">Остановлен</span>
+							{% endif %}
+						</div>
+					</div>
+				</section>
+
+				<section class="admin-section-card debug-panel">
+					<h2>Управление</h2>
+					<div class="debug-actions">
+						<form action="{{ url_for('start_bot_route') }}" method="post">
+							<button type="submit" class="button button-primary">Запустить</button>
+						</form>
+						<form action="{{ url_for('stop_bot_route') }}" method="post">
+							<button type="submit" class="button button-danger">Остановить</button>
+						</form>
+					</div>
+				</section>
+
+				<section class="admin-section-card debug-panel">
+					<h2>Сообщения от сервера</h2>
+					{% with messages = get_flashed_messages(with_categories=true) %}
+					{% if messages %}
+					<div class="debug-flash-list">
+						{% for category, message in messages %}
+						<div class="flash flash-{{ category }}">{{ message }}</div>
+						{% endfor %}
+					</div>
+					{% else %}
+					<div class="empty-state">Сообщений нет.</div>
+					{% endif %}
+					{% endwith %}
+				</section>
+			</main>
+		</div>
+	</body>
+</html>

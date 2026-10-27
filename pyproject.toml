@@ -1,0 +1,98 @@
+[project]
+name = "vless-shopbot"
+version = "2.1.0"
+description = "Бот для автоматической продажи VLESS VPN"
+requires-python = ">=3.11"
+dependencies = [
+    "aiogram==3.28.2",
+    "flask==3.1.3",
+    "py3xui==0.4.0",
+    "pyotp==2.9.0",
+    "python-dotenv==1.2.2",
+    "qrcode[pil]==8.2",
+    "yookassa==3.5.0",
+    "aiosend==3.0.6",
+    "aiohttp==3.13.4",
+    "aiohttp-sse-client==0.2.1",
+    "pytonconnect==0.3.2",
+    "plategaio==1.0.4"
+]
+
+[project.optional-dependencies]
+dev = [
+    "pip-tools",
+    "ruff",
+    "pytest",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 120
+src = ["src", "scripts", "tests"]
+
+[tool.ruff.lint]
+select = [
+    "E",      # pycodestyle errors
+    "W",      # pycodestyle warnings
+    "F",      # pyflakes
+    "I",      # isort
+    "A",      # flake8-builtins
+    "ARG",    # flake8-unused-arguments
+    "ASYNC",  # flake8-async
+    "B",      # flake8-bugbear
+    "BLE",    # flake8-blind-except
+    "C4",     # flake8-comprehensions
+    "DTZ",    # flake8-datetimez
+    "EM",     # flake8-errmsg
+    "ERA",    # eradicate
+    "EXE",    # flake8-executable
+    "FA",     # flake8-future-annotations
+    "FBT",    # flake8-boolean-trap
+    "G",      # flake8-logging-format
+    "LOG",    # flake8-logging
+    "PIE",    # flake8-pie
+    "PERF",   # perflint
+    "PLE",    # pylint errors
+    "PLW",    # pylint warnings
+    "PT",     # flake8-pytest-style
+    "PTH",    # flake8-use-pathlib
+    "RET",    # flake8-return
+    "RSE",    # flake8-raise
+    "S",      # flake8-bandit (security)
+    "SIM",    # flake8-simplify
+    "T20",    # flake8-print
+    "TRY",    # tryceratops
+    "UP",     # pyupgrade
+    "RUF",    # ruff-specific rules
+]
+ignore = [
+    "E501",   # line too long — handled by formatter
+    "S101",   # assert — OK in tests
+    "S104",   # binding to 0.0.0.0 — Docker expected
+    "S311",   # random — not used for crypto
+    "B008",   # function call in default arg — aiogram uses this pattern
+    "EM101",  # literal exception strings are acceptable in small flow guards
+    "EM102",  # f-string exception strings are acceptable in small flow guards
+    "RUF012", # mutable class var — acceptable for module-level configs
+    "RUF001", # ambiguous unicode in RU product strings; keep non-blocking via reviews
+    "RUF003", # ambiguous unicode in RU comments; keep non-blocking via reviews
+    "TRY003", # long exception messages are clearer in operational bot errors
+]
+
+[tool.ruff.lint.per-file-ignores]
+"scripts/*" = ["S", "T20"]   # security/print rules are too noisy for utility scripts
+"tests/*" = ["S", "ARG", "FBT", "E402"]
+"src/shop_bot/__main__.py" = ["E402"]
+"src/shop_bot/data_manager/scheduler.py" = ["RUF001", "RUF003"]
+
+[tool.pyright]
+pythonVersion = "3.11"
+venvPath = "."
+venv = ".venv"
+extraPaths = ["src"]

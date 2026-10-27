@@ -1,0 +1,143 @@
+{% extends "base.html" %}
+{% block title %}Покупки и выручка{% endblock %}
+{% block content %}
+<section class="admin-page-head">
+  <h1>Покупки и выручка</h1>
+  <p class="settings-page-intro admin-page-intro">Подтверждённые оплаты по журналу. Суммы до комиссий; даты и периоды — МСК.</p>
+</section>
+
+<section class="stats-section admin-section-card">
+  <h2>За всё время</h2>
+  <div class="stats-grid" id="dashboard-alltime" data-dashboard-region>
+    <div class="stat-card"><h3>Пользователей</h3><p class="stat-number">{{ stats.user_count | number_format }}</p></div>
+    <div class="stat-card"><h3>Всего ключей</h3><p class="stat-number">{{ stats.total_keys | number_format }}</p><small>Активных: {{ stats.active_keys | default(0) | number_format }} · архивных: {{ stats.archived_keys | default(0) | number_format }}</small></div>
+    <div class="stat-card"><h3>Выручка по журналу</h3><p class="stat-number">{{ stats.total_spent | number_format }} <small>₽</small></p></div>
+    <div class="stat-card"><h3>Всего хостов</h3><p class="stat-number">{{ stats.host_count | number_format }}</p><small>Исправны: {{ stats.healthy_hosts | default(0) }} · обслуживание: {{ stats.maintenance_hosts | default(0) }}</small></div>
+    {% if stats.paid_not_issued | default(0) %}<p class="dashboard-chart-error">За всё время: {{ stats.paid_not_issued }} подтверждённых оплат без завершённой выдачи. Смена периода не скрывает это предупреждение.</p>{% endif %}
+  </div>
+  <details class="dashboard-accounting-note"><summary>Исторические данные и сверка</summary><div id="dashboard-legacy-counter" data-dashboard-region><p>Счётчик профилей: {{ stats.legacy_profile_total | default(0) | number_format }} ₽. Сохранён для сверки; в расчётах выручки используется журнал оплат.</p>{% if stats.legacy_payment_dates | default(0) %}<p>У {{ stats.legacy_payment_dates }} исторических записей часовой пояс достоверно не установлен: исходная дата сохранена без сдвига.</p>{% endif %}{% if stats.invalid_payment_dates | default(0) %}<p>Без распознаваемой даты: {{ stats.invalid_payment_dates }}. Эти оплаты учтены в общей выручке, но не распределены по дням.</p>{% endif %}</div></details>
+</section>
+
+<section class="stats-section dashboard-analytics-panel admin-section-card"
+ data-live-signature-endpoint="{{ url_for('dashboard_live_signature_api') }}"
+ data-live-signature="{{ dashboard_live_signature }}" data-live-poll-ms="20000">
+  <div class="dashboard-toolbar">
+    <div class="dashboard-filter-group">
+      <span class="dashboard-filter-label">Период · МСК</span>
+      <div class="dashboard-filter-buttons">
+        {% for value, label in period_options %}
+        <a href="{{ dashboard_url(period=value) }}" class="dashboard-filter-btn {{ 'dashboard-filter-btn--active' if value == selected_period else '' }}">{{ label }}</a>
+        {% endfor %}
+        <button type="button" class="dashboard-filter-btn dashboard-filter-btn--action" id="dashboard-range-open">Календарь</button>
+      </div>
+    </div>
+    <div class="live-sync-bar dashboard-live-sync-bar">
+      <span class="live-sync-status" data-live-sync-status aria-live="polite">Проверяю свежесть данных…</span>
+      <button type="button" class="button button-small button-reset live-sync-refresh" data-live-sync-refresh>Обновить</button>
+    </div>
+  </div>
+  <p class="dashboard-filter-caption" id="dashboard-period-caption" data-dashboard-region><strong>Выбранный период:</strong> {{ period_caption }}</p>
+
+  <form method="get" action="{{ url_for('dashboard_page') }}" class="dashboard-search-form" role="search">
+    <input type="hidden" name="tx_type" value="{{ selected_tx_type }}">
+    <input type="hidden" name="bot_source" value="{{ selected_bot_source }}">
+    {% if selected_period == 'range' %}<input type="hidden" name="date_from" value="{{ date_from }}"><input type="hidden" name="date_to" value="{{ date_to }}">
+    {% else %}<input type="hidden" name="period" value="{{ selected_period }}">{% endif %}
+    <label for="dashboard-search">Поиск по Telegram ID или Payment ID</label>
+    <input id="dashboard-search" name="q" value="{{ search }}" maxlength="128" placeholder="Telegram ID или Payment ID">
+    <button type="submit" class="button button-small">Найти</button>
+    {% if search %}<a href="{{ dashboard_url(q='') }}">Сбросить поиск</a>{% endif %}
+    <a class="button button-small" href="{{ dashboard_url('dashboard_export_csv') }}">Скачать CSV</a>
+  </form>
+
+  <div id="dashboard-metrics" data-dashboard-region>
+    <div class="dashboard-kpi-grid">
+      {% for key, label, unit in [('transactions','Оплат',''),('revenue_rub','Выручка','₽'),('avg_check_rub','Средний чек','₽'),('buyers','Покупателей','')] %}
+      <div class="dashboard-kpi-card">
+        <span class="dashboard-kpi-label">{{ label }} за период</span>
+        <p class="dashboard-kpi-value">{{ selected_metrics[key] | number_format }} <small>{{ unit }}</small></p>
+        {% set change = comparison.delta_percent.get(key) %}
+        <small class="dashboard-comparison">{% if change is not none %}{{ '+' if change > 0 else '' }}{{ change | number_format }}%{% else %}Нет базы для сравнения{% endif %}</small>
+      </div>
+      {% endfor %}
+    </div>
+    <p class="dashboard-comparison-note">Сравнение с равным периодом: {{ comparison.previous_date_from | ru_date }} — {{ comparison.previous_date_to | ru_date }} · МСК.</p>
+    {% if selected_metrics.get('new_purchases') is not none %}<p>Новые покупки: {{ selected_metrics.new_purchases }} · продления: {{ selected_metrics.renewals }}</p>{% endif %}
+    <p>Впервые оплатили по журналу: {{ selected_metrics.first_time_buyers | default(0) }} · повторных оплат: {{ selected_metrics.repeat_payments | default(0) }}.</p>
+    <p class="{{ 'dashboard-chart-error' if selected_metrics.get('paid_not_issued',0) else '' }}">Оплачено, ожидает выдачи: {{ selected_metrics.paid_not_issued | default(0) }} · без отметки доставки в Telegram: {{ selected_metrics.delivery_unconfirmed | default(0) }}.</p>
+  </div>
+
+  <div class="dashboard-type-summary" id="dashboard-type-counts" data-dashboard-region aria-label="Фильтр по тарифу">
+    {% for opt in tx_type_options %}
+    <a href="{{ dashboard_url(tx_type=opt.value) }}" class="dashboard-type-summary-item dashboard-type-summary-item--btn {{ 'dashboard-type-summary-item--active' if selected_tx_type == opt.value else '' }}">
+      <span>{{ opt.label }}</span><strong>{{ (tx_summary_total if opt.value == 'all' else tx_summary.get(opt.value,0)) | number_format }}</strong>
+    </a>{% endfor %}
+  </div>
+  <div class="dashboard-type-summary dashboard-source-summary" aria-label="Фильтр по боту">
+    {% for opt in bot_source_options %}<a href="{{ dashboard_url(bot_source=opt.value) }}" class="dashboard-type-summary-item dashboard-type-summary-item--btn {{ 'dashboard-type-summary-item--active' if selected_bot_source == opt.value else '' }}">{{ opt.label }}</a>{% endfor %}
+  </div>
+
+  <details class="dashboard-collapsible trial-conversion-panel" id="dashboard-trial-details">
+    <summary><span>Покупки пользователей, использовавших пробный период</span></summary>
+    <div class="dashboard-collapsible-body" id="dashboard-trial-metrics" data-dashboard-region>
+      <p>Все оплаты и продления пользователей с отметкой о пробном периоде. Дата начала пробного периода не зафиксирована — это не показатель конверсии после него.</p>
+      <div class="dashboard-kpi-grid">
+        <div class="dashboard-kpi-card"><span>Покупателей за период</span><p class="dashboard-kpi-value">{{ trial_conversion.period_converted_users | number_format }}</p></div>
+        <div class="dashboard-kpi-card"><span>Оплат за период</span><p class="dashboard-kpi-value">{{ trial_conversion.period_transactions | number_format }}</p></div>
+        <div class="dashboard-kpi-card"><span>Выручка за период</span><p class="dashboard-kpi-value">{{ trial_conversion.period_revenue_rub | number_format }} ₽</p></div>
+      </div>
+    </div>
+  </details>
+</section>
+
+<section class="stats-section admin-section-card">
+  <p id="dashboard-chart-error" class="dashboard-chart-error" role="status" hidden>Графики не загрузились. Итоги и журнал доступны; обновите страницу для повторной загрузки.</p>
+  <div class="dashboard-chart-grid">
+    <div class="chart-container"><h3>Оплаты по дням · МСК</h3><div class="chart-canvas-wrap"><canvas id="transactionsChart" aria-label="Количество оплат по дням" role="img"></canvas></div></div>
+    <div class="chart-container"><h3>Выручка по дням · ₽</h3><div class="chart-canvas-wrap"><canvas id="revenueChart" aria-label="Выручка по дням" role="img"></canvas></div></div>
+  </div>
+  <details class="dashboard-chart-values"><summary>Данные графика в таблице</summary><div class="table-scroll-shell" id="dashboard-chart-table" data-dashboard-region><table><thead><tr><th>Дата · МСК</th><th>Оплат</th><th>Выручка · ₽</th></tr></thead><tbody>{% for day, count in chart_data.transactions.items() %}<tr><td>{{ day | ru_date }}</td><td>{{ count }}</td><td>{{ chart_data.revenue.get(day,0) | number_format }}</td></tr>{% else %}<tr><td colspan="3">Оплат в выбранном периоде нет.</td></tr>{% endfor %}</tbody></table></div></details>
+</section>
+
+<section id="dashboard-transactions-section" class="stats-section admin-section-card">
+  <details id="dashboard-transactions-details" class="dashboard-collapsible dashboard-transactions-collapsible" open>
+    <summary><span>Журнал оплат</span><span class="dashboard-collapsible-summary-meta" id="dashboard-journal-count" data-dashboard-region>{{ total_transactions | number_format }} · страница {{ current_page }} из {{ total_pages }}</span></summary>
+    <div class="dashboard-collapsible-body" id="dashboard-journal" data-dashboard-region>
+      <div class="table-scroll-shell">
+        <table class="transactions-table dashboard-purchases-table">
+          <thead><tr><th>Клиент</th><th>Тариф / действие</th><th>Оплата</th><th>Дата · МСК</th><th>Выдача / Telegram</th></tr></thead>
+          <tbody>{% for tx in transactions %}<tr>
+            <td class="table-user-cell">{% if panel_restricted | default(false) %}{{ tx.username or 'Клиент' }}{% else %}<a href="{{ url_for('users_page', search=tx.user_id) }}">{{ tx.username or 'Клиент' }}</a>{% endif %}<div class="table-secondary-text table-mono">ID {{ tx.user_id }}</div></td>
+            <td><strong>{{ tx.plan_name }}</strong><div>{{ tx.action_label or 'Не указано' }}</div><small>{{ tx.host_name }} · {{ 'Резервный' if tx.bot_source == 'reserve' else 'Основной' }}</small></td>
+            <td><strong>{{ tx.amount_rub | number_format }} ₽</strong><div>{{ tx.payment_method or 'Не указан' }}</div><details class="dashboard-payment-id" data-payment-id="{{ tx.payment_id }}"><summary>Payment ID</summary><code>{{ tx.payment_id }}</code></details></td>
+            <td class="table-date table-mono">{{ tx.paid_at_display }}</td>
+            <td><span>{{ tx.issuance_label }}</span><div class="table-secondary-text">Telegram: {{ tx.delivery_label }}</div></td>
+          </tr>{% else %}<tr><td colspan="5">Оплат для выбранного фильтра нет.</td></tr>{% endfor %}</tbody>
+        </table>
+      </div>
+      {% if total_pages > 1 %}<nav class="pagination" aria-label="Страницы покупок">
+        {% if current_page > 1 %}<a href="{{ dashboard_url(page=current_page-1) }}#dashboard-transactions-section">«</a>{% endif %}
+        {% for p in pagination_items %}{% if p is none %}<span class="pagination-ellipsis">…</span>{% else %}<a href="{{ dashboard_url(page=p) }}#dashboard-transactions-section" class="{{ 'active' if p == current_page else '' }}" {% if p == current_page %}aria-current="page"{% endif %}>{{ p }}</a>{% endif %}{% endfor %}
+        {% if current_page < total_pages %}<a href="{{ dashboard_url(page=current_page+1) }}#dashboard-transactions-section">»</a>{% endif %}
+      </nav>{% endif %}
+    </div>
+  </details>
+</section>
+
+<div id="dashboard-range-modal" class="dashboard-range-modal-overlay" hidden>
+ <div class="dashboard-range-modal" role="dialog" aria-modal="true" aria-labelledby="dashboard-range-modal-title">
+  <div class="dashboard-range-modal-header"><h3 id="dashboard-range-modal-title">Выбор периода · МСК</h3><button type="button" class="button button-small" id="dashboard-range-close" aria-label="Закрыть">×</button></div>
+  <form method="get" action="{{ url_for('dashboard_page') }}" class="dashboard-range-form">
+    <input type="hidden" name="tx_type" value="{{ selected_tx_type }}"><input type="hidden" name="bot_source" value="{{ selected_bot_source }}"><input type="hidden" name="q" value="{{ search }}">
+    <label for="dashboard-date-from">От</label><input type="date" id="dashboard-date-from" name="date_from" value="{{ date_from }}" required>
+    <label for="dashboard-date-to">До</label><input type="date" id="dashboard-date-to" name="date_to" value="{{ date_to }}" required>
+    <small>Включительно, не более 366 дней.</small>
+    <div class="dashboard-range-actions"><button type="submit" class="button button-primary">Применить</button><button type="button" class="button" id="dashboard-range-cancel">Отмена</button></div>
+  </form>
+ </div>
+</div>
+<script>
+  let CHART_DATA = {{ chart_data | tojson }};
+  let CHART_META = {{ chart_meta | tojson }};
+</script>
+{% endblock %}

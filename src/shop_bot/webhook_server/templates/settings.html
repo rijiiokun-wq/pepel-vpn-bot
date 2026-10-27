@@ -1,0 +1,1723 @@
+{% extends "base.html" %} {% block title %}Настройки Бота и Хостов{% endblock %}
+{% block content %}
+
+<h1>Настройки</h1>
+<p class="settings-page-intro">
+	Секции сгруппированы по реальным задачам: управление ботами, выдача, продажи,
+	поддержка, контент и контроль.
+</p>
+
+<div class="settings-container">
+	<div class="settings-column-right settings-column-main">
+		<div class="settings-groups-nav" role="tablist" aria-label="Группы настроек">
+			<button type="button" class="settings-group-tab is-active" data-settings-group="management" role="tab" aria-selected="true">Панель и боты</button>
+			<button type="button" class="settings-group-tab" data-settings-group="delivery" role="tab" aria-selected="false">Хосты и выдача</button>
+			<button type="button" class="settings-group-tab" data-settings-group="sales" role="tab" aria-selected="false">Продажи</button>
+			<button type="button" class="settings-group-tab" data-settings-group="support" role="tab" aria-selected="false">Поддержка</button>
+			<button type="button" class="settings-group-tab" data-settings-group="showcase" role="tab" aria-selected="false">Контент и вход</button>
+			<button type="button" class="settings-group-tab" data-settings-group="operations" role="tab" aria-selected="false">Контроль</button>
+		</div>
+
+			<section class="settings-section settings-group settings-group-delivery">
+				<h2>Хосты и тарифы</h2>
+				<div class="hosts-layout">
+					<div class="hosts-list-panel">
+						<div class="hosts-panel-head">
+							<div>
+								<h3>Существующие хосты</h3>
+								<p>Статус и конфигурация видны в списке. Добавление и настройка открываются отдельно.</p>
+							</div>
+							<button
+								type="button"
+								class="button button-primary button-small"
+								data-dialog-open="add-host-dialog"
+							>
+								Добавить хост
+							</button>
+						</div>
+
+						{% if hosts %}
+						<div class="hosts-scroll-list">
+							{% for host in hosts %}
+							<div
+							class="host-card host-card-status-{{ host.get('status', 'unknown') or 'unknown' }}"
+							data-host-card="{{ host.host_name }}"
+							>
+								<div class="host-header">
+									<div class="host-title-row">
+										<h3>{{ host.host_name }}</h3>
+										<span class="host-status host-status-{{ host.get('status', 'unknown') or 'unknown' }}" data-host-status-badge>
+											{{ host.get('status', 'unknown') or 'unknown' }}
+										</span>
+									</div>
+									<button
+										type="button"
+										class="button button-small"
+										data-dialog-open="host-dialog-{{ loop.index }}"
+									>
+										Настроить
+									</button>
+								</div>
+								<div class="host-summary-grid">
+									<p><strong>URL панели</strong><span class="host-url-value" title="{{ host.host_url }}">{{ host.host_url }}</span></p>
+									<p><strong>URL подписки</strong><span class="host-url-value" title="{{ host.host_subscription_base_url or '—' }}">{{ host.host_subscription_base_url or '—' }}</span></p>
+									<p><strong>API Token</strong><span>{{ host.host_api_token_label or '—' }}</span></p>
+									<p><strong>Тарифы</strong><span>{{ host.plans|length if host.plans else '0' }}</span></p>
+									<p><strong>Тип хоста</strong><span>{{ 'White host' if host.get('is_white_host') else 'Обычный' }}</span></p>
+									<p><strong>Node sync</strong><span>{{ host.get('node_sync_status') or 'pending' }}</span></p>
+								</div>
+								{% if host.host_api_token_mode == 'direct' %}
+								<p class="host-inline-warning">
+									Сейчас используется прямой токен. Рекомендуется перенести его в GitHub Actions Secret
+									(например, <code>XUI_API_TOKEN_{{ host.host_name|replace(' ', '_')|upper }}</code>).
+								</p>
+								{% elif host.host_api_token_mode == 'env_auto' %}
+								<p class="host-inline-note">
+									Токен взят автоматически из переменной окружения по имени хоста.
+								</p>
+								{% endif %}
+								<div class="host-check-row">
+									<small data-host-check {% if not host.get('last_check_at') %}hidden{% endif %}>Проверка: {{ ((host.get('last_check_at') or '') | string)[:19] }}</small>
+									<small data-host-error {% if not host.get('last_error') %}hidden{% endif %}>Ошибка: {{ ((host.get('last_error') or '') | string)[:120] }}</small>
+									<small data-host-sync-time {% if not host.get('node_synced_at') %}hidden{% endif %}>Node sync: {{ ((host.get('node_synced_at') or '') | string)[:19] }}</small>
+									<small data-host-sync-error {% if not host.get('node_sync_error') %}hidden{% endif %}>Node sync ошибка: {{ ((host.get('node_sync_error') or '') | string)[:180] }}</small>
+								</div>
+
+								<dialog class="settings-dialog host-settings-dialog" id="host-dialog-{{ loop.index }}">
+									<div class="settings-dialog-shell">
+										<header class="settings-dialog-header">
+											<div>
+												<p class="settings-dialog-kicker">Хост XUI</p>
+												<h3>{{ host.host_name }}</h3>
+											</div>
+											<form method="dialog">
+												<button type="submit" class="dialog-close" aria-label="Закрыть настройки хоста" data-dialog-initial-focus>×</button>
+											</form>
+										</header>
+										<div class="settings-dialog-body">
+											<div class="host-dialog-meta">
+												<p><strong>URL панели</strong><span class="host-url-value" title="{{ host.host_url }}">{{ host.host_url }}</span></p>
+												<p><strong>URL подписки</strong><span class="host-url-value" title="{{ host.host_subscription_base_url or '—' }}">{{ host.host_subscription_base_url or '—' }}</span></p>
+												<p><strong>Логин XUI</strong><span>{{ host.host_username }}</span></p>
+												<p><strong>Inbound ID</strong><span>{{ host.host_inbound_id }}</span></p>
+												<p><strong>API Token</strong><span>{{ host.host_api_token_label or '—' }}</span></p>
+												<p><strong>White host</strong><span>{{ 'Да' if host.get('is_white_host') else 'Нет' }}</span></p>
+												<p><strong>Delivery state</strong><span>{{ host.get('delivery_state') or 'active' }}</span></p>
+												<p><strong>Node ID</strong><span>{{ host.get('node_id') or '—' }}</span></p>
+												<p><strong>Node inbound ID</strong><span>{{ host.get('node_inbound_id') or '—' }}</span></p>
+												<p><strong>Node sync status</strong><span>{{ host.get('node_sync_status') or 'pending' }}</span></p>
+											</div>
+
+											<section class="dialog-section">
+												<div class="dialog-section-head">
+													<h4>Жизненный цикл хоста</h4>
+													<p>Сначала проверка inbound, затем активация для новых выдач. Backfill существующих клиентов запускается только ограниченным батчем.</p>
+												</div>
+												<div class="host-check-row">
+													<small {% if not host.get('node_synced_at') %}hidden{% endif %}>Последний успешный sync: {{ ((host.get('node_synced_at') or '') | string)[:19] }}</small>
+													<small {% if not host.get('node_sync_error') %}hidden{% endif %} style="color: #ff9b9b">Ошибка sync: {{ ((host.get('node_sync_error') or '') | string)[:240] }}</small>
+												</div>
+												<div class="dialog-actions">
+													<form action="{{ url_for('validate_host_route', host_name=host.host_name) }}" method="post">
+														<button type="submit" class="button button-secondary button-small">Проверить хост</button>
+													</form>
+													<form action="{{ url_for('activate_host_route', host_name=host.host_name) }}" method="post">
+														<button type="submit" class="button button-primary button-small">Активировать</button>
+													</form>
+													<form action="{{ url_for('disable_host_route', host_name=host.host_name) }}" method="post">
+														<button type="submit" class="button button-danger button-small">Отключить</button>
+													</form>
+												</div>
+												<div class="dialog-actions">
+													<form action="{{ url_for('sync_host_node_route', host_name=host.host_name) }}" method="post">
+														<input type="hidden" name="dry_run" value="true" />
+														<input type="hidden" name="client_limit" value="50" />
+														<button type="submit" class="button button-secondary button-small">Dry-run 50</button>
+													</form>
+													<form action="{{ url_for('sync_host_node_route', host_name=host.host_name) }}" method="post">
+														<input type="hidden" name="client_limit" value="50" />
+														<button type="submit" class="button button-primary button-small">Backfill 50</button>
+													</form>
+												</div>
+											</section>
+
+											<section class="dialog-section">
+												<div class="dialog-section-head">
+													<h4>Основные параметры хоста</h4>
+													<p>Редактируемые поля, которые backend использует для логина в XUI, выдачи ключей, подписки и node-sync.</p>
+												</div>
+												<form action="{{ url_for('update_host_config_route', host_name=host.host_name) }}" method="post">
+													<div class="dialog-form-columns">
+														<div class="form-group">
+															<label for="host-url-{{ loop.index }}">URL панели</label>
+															<input
+																type="url"
+																id="host-url-{{ loop.index }}"
+																name="host_url"
+																value="{{ host.host_url }}"
+																required
+															/>
+														</div>
+														<div class="form-group">
+															<label for="host-subscription-url-{{ loop.index }}">URL подписки</label>
+															<input
+																type="url"
+																id="host-subscription-url-{{ loop.index }}"
+																name="host_subscription_base_url"
+																value="{{ host.host_subscription_base_url or '' }}"
+																placeholder="https://example.com/sub/"
+															/>
+														</div>
+														<div class="form-group">
+															<label for="host-username-{{ loop.index }}">Логин XUI</label>
+															<input
+																type="text"
+																id="host-username-{{ loop.index }}"
+																name="host_username"
+																value="{{ host.host_username }}"
+																required
+															/>
+														</div>
+														<div class="form-group password-wrapper">
+															<label for="host-pass-{{ loop.index }}">Пароль XUI</label>
+															<input
+																type="password"
+																id="host-pass-{{ loop.index }}"
+																name="host_pass"
+																placeholder="Оставьте пустым, чтобы сохранить текущий"
+																autocomplete="off"
+															/>
+															<button type="button" class="toggle-password">👁️</button>
+														</div>
+														<div class="form-group">
+															<label for="host-inbound-id-{{ loop.index }}">ID входящего подключения</label>
+															<input
+																type="number"
+																id="host-inbound-id-{{ loop.index }}"
+																name="host_inbound_id"
+																value="{{ host.host_inbound_id }}"
+																min="1"
+																required
+															/>
+														</div>
+														<div class="form-group">
+															<input type="hidden" name="is_white_host" value="false" />
+															<label class="toggle-label" for="host-white-{{ loop.index }}">
+																<input
+																	type="checkbox"
+																	id="host-white-{{ loop.index }}"
+																	name="is_white_host"
+																	value="true"
+																	{% if host.get('is_white_host') %}checked{% endif %}
+																/>
+																White host (Стандарт — 5 ГБ/мес., Супер — 40 ГБ/мес.)
+															</label>
+														</div>
+														<div class="form-group">
+															<label for="host-delivery-state-{{ loop.index }}">Состояние выдачи</label>
+															<select id="host-delivery-state-{{ loop.index }}" name="delivery_state">
+																<option value="draft" {% if (host.get('delivery_state') or 'active') == 'draft' %}selected{% endif %}>Draft: не выдавать</option>
+																<option value="active" {% if (host.get('delivery_state') or 'active') == 'active' %}selected{% endif %}>Active: участвует</option>
+																<option value="disabled" {% if (host.get('delivery_state') or 'active') == 'disabled' %}selected{% endif %}>Disabled: отключен</option>
+															</select>
+														</div>
+													</div>
+													<div class="host-dialog-meta">
+														<p><strong>Read-only: node_id</strong><span>{{ host.get('node_id') or '—' }}</span></p>
+														<p><strong>Read-only: node_inbound_id</strong><span>{{ host.get('node_inbound_id') or '—' }}</span></p>
+														<p><strong>Read-only: node_sync_status</strong><span>{{ host.get('node_sync_status') or 'pending' }}</span></p>
+														<p><strong>Read-only: last_check_at</strong><span>{{ ((host.get('last_check_at') or '—') | string)[:19] }}</span></p>
+													</div>
+													<p class="settings-inline-note">
+														Служебные поля node-sync и health-check не редактируются вручную. После изменения URL, inbound или White host запустите повторный sync, если хост уже подключён как node.
+													</p>
+													<div class="dialog-actions">
+														<button type="submit" class="button button-primary button-small">Сохранить параметры</button>
+													</div>
+												</form>
+											</section>
+
+											<section class="dialog-section">
+												<div class="dialog-section-head">
+													<h4>Авторизация API</h4>
+													<p>Для постоянной работы выбирайте переменную окружения. Прямой токен оставлен для проверки.</p>
+												</div>
+												<form action="{{ url_for('update_host_api_token_route', host_name=host.host_name) }}" method="post">
+													<fieldset class="token-source" data-token-source>
+														<legend>Источник XUI API Token</legend>
+														<div class="token-source-modes">
+															<label>
+																<input
+																	type="radio"
+																	name="host_api_token_mode"
+																	value="env"
+																	{% if host.host_api_token_mode != 'direct' %}checked{% endif %}
+																/>
+																		Переменная окружения
+															</label>
+															<label>
+																<input
+																	type="radio"
+																	name="host_api_token_mode"
+																	value="direct"
+																	{% if host.host_api_token_mode == 'direct' %}checked{% endif %}
+																/>
+																Прямой токен
+															</label>
+														</div>
+														<div class="token-source-panel" data-token-panel="env">
+															<div class="form-group">
+																<label for="host-token-env-choice-{{ loop.index }}">Переменная из runtime env</label>
+																<select id="host-token-env-choice-{{ loop.index }}" name="host_api_token_env_choice">
+																	<option value="">Авто по имени хоста / не выбрано</option>
+																	{% if host.host_api_token_mode == 'env' and host.host_api_token_env %}
+																	<option value="{{ host.host_api_token_env }}" selected>Текущая: {{ host.host_api_token_label }}</option>
+																	{% endif %}
+																	{% for env_name in xui_api_token_env_candidates %}
+																	<option
+																		value="env:{{ env_name }}"
+																		{% if host.host_api_token_env == env_name or host.host_api_token_env == 'env:' ~ env_name %}selected{% endif %}
+																	>
+																		{{ env_name }}
+																	</option>
+																	{% endfor %}
+																</select>
+															</div>
+															<div class="form-group">
+																<label for="host-token-env-name-{{ loop.index }}">Или имя переменной вручную</label>
+																<input
+																	type="text"
+																	id="host-token-env-name-{{ loop.index }}"
+																	name="host_api_token_env_name"
+																	pattern="(?:env:)?[A-Z_][A-Z0-9_]*"
+																	placeholder="XUI_API_TOKEN_SUPER2"
+																	autocomplete="off"
+																/>
+																<small>Значение токена хранится в GitHub Actions Secrets и runtime .env.</small>
+															</div>
+														</div>
+														<div class="token-source-panel" data-token-panel="direct">
+															<div class="form-group password-wrapper">
+																<label for="host-token-direct-{{ loop.index }}">Прямой API token</label>
+																<input
+																	type="password"
+																	id="host-token-direct-{{ loop.index }}"
+																	name="host_api_token_direct"
+																	value="{% if host.host_api_token_mode == 'direct' %}{{ host.host_api_token_env or '' }}{% endif %}"
+																	autocomplete="off"
+																/>
+																<button type="button" class="toggle-password">👁️</button>
+																<small>После проверки перенесите токен в GitHub Actions Secret и выберите переменную выше.</small>
+															</div>
+														</div>
+													</fieldset>
+													<div class="dialog-actions">
+														<button type="submit" class="button button-primary button-small">Сохранить токен</button>
+													</div>
+												</form>
+											</section>
+
+											<section class="dialog-section">
+												<div class="dialog-section-head">
+													<h4>Тарифы</h4>
+													<p>Тариф создается для выбранного хоста.</p>
+												</div>
+												{% if host.plans %}
+												<ul class="plan-list">
+													{% for plan in host.plans %}
+													<li>
+														<span>{{ plan.plan_name }} - {{ plan.price|round(0) }} RUB</span>
+														<form action="{{ url_for('delete_plan_route', plan_id=plan.plan_id) }}" method="post">
+															<button type="submit" class="button button-danger button-tiny" aria-label="Удалить тариф {{ plan.plan_name }}">×</button>
+														</form>
+													</li>
+													{% endfor %}
+												</ul>
+												{% else %}
+												<p class="settings-inline-note">Тарифы не добавлены.</p>
+												{% endif %}
+												<form action="{{ url_for('add_plan_route') }}" method="post" class="dialog-form-grid">
+													<input type="hidden" name="host_name" value="{{ host.host_name }}" />
+													<div class="form-group">
+														<label for="plan-name-{{ loop.index }}">Название</label>
+														<input type="text" id="plan-name-{{ loop.index }}" name="plan_name" required />
+													</div>
+													<div class="form-group">
+														<label for="plan-months-{{ loop.index }}">Месяцы</label>
+														<input type="number" id="plan-months-{{ loop.index }}" name="months" min="1" required />
+													</div>
+													<div class="form-group">
+														<label for="plan-price-{{ loop.index }}">Цена, RUB</label>
+														<input type="number" id="plan-price-{{ loop.index }}" step="0.01" name="price" min="0" required />
+													</div>
+													<div class="dialog-form-submit">
+														<button type="submit" class="button button-primary button-small">Добавить тариф</button>
+													</div>
+												</form>
+											</section>
+
+											<section class="dialog-section host-danger-zone">
+												<div class="host-dialog-actions">
+													<label class="toggle-label">
+														<input
+															type="checkbox"
+															class="host-maintenance-toggle"
+															data-host="{{ host.host_name }}"
+															{% if host.get('is_maintenance') %}checked{% endif %}
+															onchange="toggleHostMaintenance(this)"
+														/>
+														Обслуживание: <span data-host-maintenance-label>{{ 'Вкл' if host.get('is_maintenance') else 'Выкл' }}</span>
+													</label>
+													<form
+														action="{{ url_for('delete_host_route', host_name=host.host_name) }}"
+														method="post"
+														data-confirm="Вы уверены, что хотите удалить этот хост и все его тарифы?"
+													>
+														<button type="submit" class="button button-danger button-small">Удалить хост</button>
+													</form>
+												</div>
+											</section>
+										</div>
+									</div>
+								</dialog>
+							</div>
+							{% endfor %}
+						</div>
+						{% else %}
+					<div class="host-card">
+						<p>Хосты еще не добавлены.</p>
+						</div>
+						{% endif %}
+					</div>
+				</div>
+
+				<dialog class="settings-dialog add-host-dialog" id="add-host-dialog">
+					<div class="settings-dialog-shell">
+						<header class="settings-dialog-header">
+							<div>
+								<p class="settings-dialog-kicker">Хост XUI</p>
+								<h3>Новый хост</h3>
+							</div>
+							<form method="dialog">
+								<button type="submit" class="dialog-close" aria-label="Закрыть добавление хоста" data-dialog-initial-focus>×</button>
+							</form>
+						</header>
+						<div class="settings-dialog-body">
+							<form action="{{ url_for('add_host_route') }}" method="post">
+								<div class="dialog-form-columns">
+								<div class="form-group">
+									<label for="host_name">Название хоста:</label>
+									<input type="text" id="host_name" name="host_name" required maxlength="26" />
+							</div>
+							<div class="form-group">
+								<label for="host_url">URL панели XUI:</label>
+								<input
+									type="url"
+									id="host_url"
+									name="host_url"
+									placeholder="http://123.45.67.89:54321"
+									required
+								/>
+							</div>
+							<div class="form-group">
+								<label for="host_subscription_base_url">URL подписки для клиентов:</label>
+								<input
+									type="url"
+									id="host_subscription_base_url"
+									name="host_subscription_base_url"
+									placeholder="https://IP:port/path/"
+								/>
+								<small>Используется для выдачи ссылки подписки и супер-ключа.</small>
+							</div>
+							<div class="form-group">
+								<label for="host_username">Логин XUI:</label>
+								<input type="text" id="host_username" name="host_username" required />
+							</div>
+								<div class="form-group password-wrapper">
+									<label for="host_pass">Пароль XUI:</label>
+									<input type="password" id="host_pass" name="host_pass" required />
+									<button type="button" class="toggle-password">👁️</button>
+								</div>
+								<div class="form-group">
+									<label for="host_inbound_id">ID входящего подключения:</label>
+									<input type="number" id="host_inbound_id" name="host_inbound_id" required />
+								</div>
+								<div class="form-group">
+									<input type="hidden" name="is_white_host" value="false" />
+									<label class="toggle-label" for="is_white_host">
+										<input type="checkbox" id="is_white_host" name="is_white_host" value="true" />
+										White host (Стандарт — 5 ГБ/мес., Супер — 40 ГБ/мес.)
+									</label>
+								</div>
+								</div>
+								<fieldset class="token-source" data-token-source>
+									<legend>Источник XUI API Token</legend>
+									<div class="token-source-modes">
+										<label>
+											<input type="radio" name="host_api_token_mode" value="env" checked />
+											Переменная окружения
+										</label>
+										<label>
+											<input type="radio" name="host_api_token_mode" value="direct" />
+											Прямой токен
+										</label>
+									</div>
+									<div class="token-source-panel" data-token-panel="env">
+										<div class="dialog-form-columns">
+											<div class="form-group">
+												<label for="new-host-token-env-choice">Переменная из runtime env</label>
+												<select id="new-host-token-env-choice" name="host_api_token_env_choice">
+													<option value="">Авто по имени хоста / не выбрано</option>
+													{% for env_name in xui_api_token_env_candidates %}
+													<option value="env:{{ env_name }}">{{ env_name }}</option>
+													{% endfor %}
+												</select>
+											</div>
+											<div class="form-group">
+												<label for="new-host-token-env-name">Или имя переменной вручную</label>
+												<input
+													type="text"
+													id="new-host-token-env-name"
+													name="host_api_token_env_name"
+													pattern="(?:env:)?[A-Z_][A-Z0-9_]*"
+													placeholder="XUI_API_TOKEN_SUPER2"
+													autocomplete="off"
+												/>
+											</div>
+										</div>
+										<small>Укажите имя переменной. Значение хранится только в GitHub Actions Secrets / runtime .env.</small>
+									</div>
+									<div class="token-source-panel" data-token-panel="direct">
+										<div class="form-group password-wrapper">
+											<label for="new-host-token-direct">Прямой API token</label>
+											<input
+												type="password"
+												id="new-host-token-direct"
+												name="host_api_token_direct"
+												autocomplete="off"
+											/>
+											<button type="button" class="toggle-password">👁️</button>
+											<small>Прямой токен оставлен для теста. Для постоянной работы перенесите его в GitHub Actions Secret.</small>
+										</div>
+									</div>
+								</fieldset>
+								<div class="dialog-actions">
+									<button type="submit" class="button button-primary">Добавить хост</button>
+									<button type="button" class="button button-small" data-dialog-close>Отмена</button>
+								</div>
+							</form>
+						</div>
+					</div>
+				</dialog>
+			</section>
+
+		<section class="settings-section settings-group settings-group-delivery">
+			<h2>Недоступные покупки</h2>
+			<div class="host-card">
+				{% if settings.maintenance_mode == 'true' %}
+				<p>
+					<strong>Глобально:</strong> включен режим обслуживания, покупки отключены для всех тарифов.
+				</p>
+				{% endif %}
+				{% if disabled_purchases %}
+				<ul class="plan-list">
+					{% for item in disabled_purchases %}
+					<li>
+						<span>
+							<strong>{{ item.host_name }}</strong> — {{ item.status }}
+							{% if item.plans_count %} (тарифов: {{ item.plans_count }}) {% endif %}
+							{% if item.last_error %}
+							<br /><small style="color: #c0392b">Ошибка: {{ (item.last_error | string)[:120] }}</small>
+							{% endif %}
+						</span>
+					</li>
+					{% endfor %}
+				</ul>
+				{% elif settings.maintenance_mode != 'true' %}
+				<p>Отключенных покупок по хостам нет.</p>
+				{% endif %}
+			</div>
+		</section>
+
+		<form action="{{ url_for('settings_page') }}" method="post">
+			<input type="hidden" name="csrf_token" value="{{ referral_csrf_token }}" />
+			<section class="settings-section settings-group settings-group-management">
+				<h2>Доступ в админ-панель</h2>
+				<div class="form-group">
+					<label for="panel_login">Логин для входа в панель:</label>
+					<input
+						type="text"
+						id="panel_login"
+						name="panel_login"
+						value="{{ settings.panel_login or '' }}"
+						required
+					/>
+				</div>
+				<div class="form-group password-wrapper">
+					<label for="panel_password"
+						>Новый пароль (оставьте пустым, чтобы не менять):</label
+					>
+					<input type="password" id="panel_password" name="panel_password" />
+					<button type="button" class="toggle-password">👁️</button>
+				</div>
+			</section>
+
+			<section class="settings-section settings-group settings-group-management">
+				<h2>Основной бот</h2>
+				<div class="form-group password-wrapper">
+					<label for="telegram_bot_token">Токен бота:</label>
+					<input
+						type="password"
+						id="telegram_bot_token"
+						name="telegram_bot_token"
+						value="{{ settings.telegram_bot_token or '' }}"
+						required
+					/>
+					<button type="button" class="toggle-password">👁️</button>
+				</div>
+				<div class="form-group">
+					<label for="telegram_bot_username">Username бота (без @):</label>
+					<input
+						type="text"
+						id="telegram_bot_username"
+						name="telegram_bot_username"
+						value="{{ settings.telegram_bot_username or '' }}"
+						required
+					/>
+				</div>
+				<div class="form-group">
+					<label for="admin_telegram_id">Telegram ID Администратора:</label>
+					<input
+						type="text"
+						id="admin_telegram_id"
+						name="admin_telegram_id"
+						value="{{ settings.admin_telegram_id or '' }}"
+						required
+					/>
+				</div>
+			</section>
+
+			<section class="settings-section settings-group settings-group-management">
+				<h2>Резервный бот</h2>
+				<p class="settings-section-intro">
+					Здесь настраивается reserve-runtime. Платёжный провайдер Platega вынесен в
+					раздел «Платёжные системы», чтобы не смешивать runtime и эквайринг.
+				</p>
+				<div class="form-group password-wrapper">
+					<label for="reserve_bot_token">Токен резервного бота:</label>
+					<input
+						type="password"
+						id="reserve_bot_token"
+						name="reserve_bot_token"
+						value="{{ settings.reserve_bot_token or '' }}"
+					/>
+					<button type="button" class="toggle-password">👁️</button>
+				</div>
+				<div class="form-group">
+					<label for="reserve_bot_username">Username резервного бота (без @):</label>
+					<input
+						type="text"
+						id="reserve_bot_username"
+						name="reserve_bot_username"
+						value="{{ settings.reserve_bot_username or '' }}"
+					/>
+				</div>
+				<div class="settings-subsection settings-runtime-subsection">
+					<div class="settings-subsection-head">
+						<div>
+							<h3>Runtime резервного бота</h3>
+							<p class="settings-runtime-description">
+								Служебный блок: показывает, где сейчас запускается резервный бот и
+								откуда им можно управлять.
+							</p>
+						</div>
+						{% if runtime_bot_source == 'reserve' %}
+						<span class="settings-chip">Локальное управление</span>
+						{% else %}
+						<span class="settings-chip settings-chip-muted">Управление в шапке</span>
+						{% endif %}
+					</div>
+						{% if runtime_bot_source == 'reserve' %}
+						{% set shop_running = bot_status.get('shop_bot_running', False) %}
+						{% set shop_healthy = bot_status.get('shop_bot_healthy', shop_running) %}
+						{% set shop_live = shop_running and shop_healthy %}
+						{% set shop_hint = bot_status.get('shop_bot_health_message', '') %}
+						<div class="settings-runtime-status-row">
+							<div class="settings-runtime-status">
+								<span class="settings-runtime-label">Состояние</span>
+								{% if shop_running %}
+								<span class="status-badge status-active">Запущен</span>
+								{% else %}
+								<span class="status-badge status-banned">Остановлен</span>
+								{% endif %}
+							</div>
+							<div class="settings-inline-actions">
+								{% if shop_running %}
+								{% if allow_runtime_stop %}
+								<form action="{{ url_for('stop_shop_bot_route') }}" method="post">
+									<button type="submit" class="button button-warning">Остановить</button>
+								</form>
+								{% else %}
+								<button type="button" class="button button-warning" disabled title="Always-on: остановка отключена">Остановить</button>
+								{% endif %}
+							{% else %}
+							<form action="{{ url_for('start_shop_bot_route') }}" method="post">
+								<button
+									type="submit"
+									class="button button-start"
+									{% if not all_settings_ok %}disabled title="Заполните обязательные настройки резервного бота"{% endif %}
+								>Запустить</button>
+							</form>
+							{% endif %}
+						</div>
+					</div>
+					{% else %}
+					<p class="settings-runtime-note">
+						Эта панель работает в режиме <code>BOT_SOURCE=main</code>, поэтому
+						прямой запуск выполняется через кнопку <strong>Reserve</strong> в верхней
+						панели. Команда проксируется во внутренний reserve-runtime
+						(<code>BOT_SOURCE=reserve</code>).
+					</p>
+					{% endif %}
+				</div>
+			</section>
+
+			<section class="settings-section settings-group settings-group-delivery">
+				<h2>Выдача подписок</h2>
+				<div class="form-group">
+					<label for="super_key_host_name">Хост для выдачи подписки Супер:</label>
+					<select id="super_key_host_name" name="super_key_host_name">
+						<option value="">Отключено</option>
+						{% for host in hosts %}
+						<option
+							value="{{ host.host_name }}"
+							{% if settings.super_key_host_name == host.host_name %}selected{% endif %}
+						>
+							{{ host.host_name }}
+							{% if host.host_subscription_base_url %}(есть URL подписки){% else %}(без URL подписки){% endif %}
+						</option>
+						{% endfor %}
+					</select>
+					<small>
+						Супер-ключ привязывается к конкретному хосту. Если у хоста заполнен
+						URL подписки, пользователю будет выдана ссылка подписки вместо обычного
+						ключа.
+					</small>
+				</div>
+				<div class="form-group">
+					<label for="standard_key_host_name">Хост для выдачи подписки Стандарт:</label>
+					<select id="standard_key_host_name" name="standard_key_host_name">
+						<option value="">StandartVLESS по умолчанию</option>
+						{% for host in hosts %}
+						<option
+							value="{{ host.host_name }}"
+							{% if settings.standard_key_host_name == host.host_name %}selected{% endif %}
+						>
+							{{ host.host_name }}
+							{% if host.plans %}(тарифов: {{ host.plans|length }}){% else %}(без тарифов){% endif %}
+						</option>
+						{% endfor %}
+					</select>
+					<small>Стандартные покупки будут брать тарифы и выдавать ключи с выбранного хоста.</small>
+				</div>
+			</section>
+			<section class="settings-section settings-group settings-group-support">
+				<h2>Поддержка пользователей</h2>
+				<p class="settings-section-intro">
+					Выберите основной канал поддержки. Имена полей и сохраняемые ключи не менялись,
+					меняется только структура и подача интерфейса.
+				</p>
+				<div class="settings-subsection">
+					<div class="form-group">
+						<label for="support_user">Ссылка на поддержку</label>
+						<input
+							type="text"
+							id="support_user"
+							name="support_user"
+							value="{{ settings.support_user or '' }}"
+						/>
+						<small>Можно указать URL, @username или Telegram deep-link.</small>
+					</div>
+					<div class="form-group form-group-checkbox">
+						<input type="hidden" name="chatwoot_enabled" value="false" />
+						<input type="checkbox" id="chatwoot_enabled" name="chatwoot_enabled"
+						value="true" {% if settings.chatwoot_enabled == 'true' %}checked{% endif %}
+						onchange="toggleChatwootFields()">
+						<label for="chatwoot_enabled">Вести поддержку через Chatwoot</label>
+					</div>
+				</div>
+
+				<div id="chatwootFields" class="settings-subsection settings-mode-card" {% if settings.chatwoot_enabled != 'true' %}style="display:none"{% endif %}>
+					<div class="settings-subsection-head">
+						<h3>Chatwoot</h3>
+						<span class="settings-chip">основной канал</span>
+					</div>
+					<div class="form-group">
+						<label for="chatwoot_api_url">Адрес Chatwoot</label>
+						<input
+							type="text"
+							id="chatwoot_api_url"
+							name="chatwoot_api_url"
+							value="{{ settings.chatwoot_api_url or '' }}"
+							placeholder="https://app.chatwoot.com"
+						/>
+						<small>Без слеша в конце. Для self-hosted — ваш URL.</small>
+					</div>
+					<div class="form-group">
+						<label for="chatwoot_account_id">Account ID</label>
+						<input
+							type="text"
+							id="chatwoot_account_id"
+							name="chatwoot_account_id"
+							value="{{ settings.chatwoot_account_id or '' }}"
+							placeholder="Число из URL: /app/accounts/ID/..."
+						/>
+					</div>
+					<div class="form-group password-wrapper">
+						<label for="chatwoot_api_token">API-токен</label>
+						<input
+							type="password"
+							id="chatwoot_api_token"
+							name="chatwoot_api_token"
+							value="{{ settings.chatwoot_api_token or '' }}"
+							placeholder="User Access Token из профиля Chatwoot"
+						/>
+						<button type="button" class="toggle-password">👁️</button>
+					</div>
+					<div class="form-group">
+						<label for="chatwoot_inbox_id">Inbox ID Telegram</label>
+						<input
+							type="text"
+							id="chatwoot_inbox_id"
+							name="chatwoot_inbox_id"
+							value="{{ settings.chatwoot_inbox_id or '' }}"
+							placeholder="ID из Settings → Inboxes"
+						/>
+					</div>
+					<p class="settings-inline-note"><small>Переключатель не останавливает старый support-бот автоматически. Сначала переключите runtime, затем включайте Chatwoot.</small></p>
+				</div>
+
+				<div id="forumBotFields" class="settings-subsection settings-mode-card" {% if settings.chatwoot_enabled == 'true' %}style="display:none"{% endif %}>
+					<div class="settings-subsection-head">
+						<h3>Telegram Topics</h3>
+						<span class="settings-chip settings-chip-muted">резервный режим</span>
+					</div>
+					<div class="form-group password-wrapper">
+						<label for="support_bot_token">Токен support-бота</label>
+						<input
+							type="password"
+							id="support_bot_token"
+							name="support_bot_token"
+							value="{{ settings.support_bot_token or '' }}"
+						/>
+						<button type="button" class="toggle-password">👁️</button>
+					</div>
+					<div class="form-group">
+						<label for="support_group_id">ID группы поддержки</label>
+						<input
+							type="text"
+							id="support_group_id"
+							name="support_group_id"
+							value="{{ settings.support_group_id or '' }}"
+						/>
+						<small>Используйте группу Telegram с включёнными Topics.</small>
+					</div>
+				</div>
+			</section>
+			<section class="settings-section settings-group settings-group-sales">
+				<h2>Реферальная программа</h2>
+				<p class="settings-section-intro">
+					Параметры начисления партнёрских бонусов и ограничений на вывод.
+					<a href="{{ url_for('referrals_page') }}">Рефералы, балансы, начисления и заявки на вывод →</a>
+				</p>
+				<div class="settings-subsection">
+					<div class="form-group form-group-checkbox">
+						<input type="hidden" name="enable_referrals" value="false" />
+						<input type="checkbox" id="enable_referrals" name="enable_referrals"
+						value="true" {% if settings.enable_referrals == 'true' %}checked{%
+						endif %}>
+						<label for="enable_referrals">Включить реферальную программу</label>
+					</div>
+					<div class="form-group">
+						<label for="minimum_withdrawal">Минимум к выводу</label>
+						<input
+							type="number"
+							id="minimum_withdrawal"
+							name="minimum_withdrawal"
+							value="{{ settings.minimum_withdrawal or '500' }}" min="0.01" max="1000000000000" step="0.01" required
+						/>
+					</div>
+					<div class="form-group">
+						<label for="referral_percentage">Вознаграждение пригласившему, %</label>
+						<input
+							type="number"
+							id="referral_percentage"
+							name="referral_percentage"
+							value="{{ settings.referral_percentage or '0' }}" min="0" max="100" step="0.01" required
+						/>
+					</div>
+					<div class="form-group">
+						<label for="referral_discount">Скидка приглашённому на первую покупку, %</label>
+						<input
+							type="number"
+							id="referral_discount"
+							name="referral_discount"
+							value="{{ settings.referral_discount or '0' }}" min="0" max="99.99" step="0.01" required
+						/>
+						<small>Только первая покупка, кроме промотарифов. При выключенной программе новые связи, скидки и начисления остановлены; существующие балансы и заявки сохраняются.</small>
+					</div>
+				</div>
+			</section>
+			<section class="settings-section settings-group settings-group-sales">
+				<h2>Пробный доступ</h2>
+				<p class="settings-section-intro">
+					Сроки тестового доступа для обычной и VLESS-выдачи.
+				</p>
+				<div class="settings-subsection">
+					<div class="form-group form-group-checkbox">
+						<input type="hidden" name="trial_enabled" value="false" />
+						<input type="checkbox" id="trial_enabled" name="trial_enabled"
+						value="true" {% if settings.trial_enabled == 'true' %}checked{% endif
+						%}>
+						<label for="trial_enabled">Включить пробный доступ</label>
+					</div>
+					<div class="form-group">
+						<label for="trial_duration_days">Пробный доступ Hysteria, дней</label>
+						<input
+							type="number"
+							id="trial_duration_days"
+							name="trial_duration_days"
+							value="{{ settings.trial_duration_days or '2' }}"
+							min="1"
+							max="2"
+							step="1"
+						/>
+					</div>
+					<div class="form-group">
+						<label for="trial_duration_days_super">Пробный доступ VLESS, дней</label>
+						<input
+							type="number"
+							id="trial_duration_days_super"
+							name="trial_duration_days_super"
+							value="{{ settings.trial_duration_days_super or '2' }}"
+							min="1"
+							max="2"
+							step="1"
+						/>
+					</div>
+				</div>
+			</section>
+			<section class="settings-section settings-group settings-group-sales">
+				<h2>Платёжные системы</h2>
+				<p class="settings-section-intro">
+					Заполняйте только те провайдеры, которые реально включены в продаже.
+				</p>
+				<div class="settings-card-grid settings-card-grid-payments">
+					<div class="settings-subsection settings-provider-card">
+						<div class="settings-subsection-head">
+							<h3>YooKassa</h3>
+							<span class="settings-chip">карты и СБП</span>
+						</div>
+						<div class="form-group form-group-checkbox">
+							<input type="hidden" name="yookassa_payments_enabled" value="false" />
+							<input
+								type="checkbox"
+								id="yookassa_payments_enabled"
+								name="yookassa_payments_enabled"
+								value="true"
+								{% if settings.yookassa_payments_enabled == 'true' %}checked{% endif %}
+							/>
+							<label for="yookassa_payments_enabled">Разрешить оплату в основном боте</label>
+						</div>
+						<div class="form-group">
+							<label for="receipt_email">Email для чеков</label>
+							<input
+								type="text"
+								id="receipt_email"
+								name="receipt_email"
+								value="{{ settings.receipt_email or '' }}"
+							/>
+						</div>
+						<div class="form-group">
+							<label for="yookassa_shop_id">Shop ID</label>
+							<input
+								type="text"
+								id="yookassa_shop_id"
+								name="yookassa_shop_id"
+								value="{{ settings.yookassa_shop_id or '' }}"
+							/>
+						</div>
+						<div class="form-group password-wrapper">
+							<label for="yookassa_secret_key">Secret key</label>
+							<input
+								type="password"
+								id="yookassa_secret_key"
+								name="yookassa_secret_key"
+								value="{{ settings.yookassa_secret_key or '' }}"
+							/>
+							<button type="button" class="toggle-password">👁️</button>
+						</div>
+						<div class="form-group form-group-checkbox">
+							<input type="hidden" name="sbp_enabled" value="false" />
+							<input type="checkbox" id="sbp_enabled" name="sbp_enabled"
+							value="true" {% if settings.sbp_enabled == 'true' %}checked{% endif
+							%}>
+							<label for="sbp_enabled">Включить СБП</label>
+						</div>
+					</div>
+					<div class="settings-subsection settings-provider-card">
+						<div class="settings-subsection-head">
+							<h3>PayPear</h3>
+							<span class="settings-chip settings-chip-muted">main + reserve</span>
+						</div>
+						<p class="settings-inline-note">
+							<small>Платёжный провайдер для обоих рантаймов. Данные используются общим бэкендом для main и reserve.</small>
+						</p>
+						<div class="form-group password-wrapper">
+							<label for="paypear_secret_key">Secret key</label>
+							<input
+								type="password"
+								id="paypear_secret_key"
+								name="paypear_secret_key"
+								value="{{ settings.paypear_secret_key or settings.paypear_api_key or '' }}"
+							/>
+							<button type="button" class="toggle-password">👁️</button>
+						</div>
+						<div class="form-group">
+							<label for="paypear_shop_id">Shop ID</label>
+							<input
+								type="text"
+								id="paypear_shop_id"
+								name="paypear_shop_id"
+								value="{{ settings.paypear_shop_id or '' }}"
+							/>
+						</div>
+							<div class="form-group password-wrapper">
+								<label for="paypear_webhook_secret">Webhook secret</label>
+								<input
+									type="password"
+									id="paypear_webhook_secret"
+									name="paypear_webhook_secret"
+									value="{{ settings.paypear_webhook_secret or '' }}"
+								/>
+								<button type="button" class="toggle-password">👁️</button>
+							</div>
+							<div class="form-group">
+								<label for="paypear_webhook_url">Webhook URL</label>
+								<input
+									type="text"
+									id="paypear_webhook_url"
+									name="paypear_webhook_url"
+									value="{{ settings.paypear_webhook_url or '' }}"
+									placeholder="https://example.com/paypear-webhook"
+								/>
+								<small>Если пусто, бэкенд соберёт URL из поля «Домен магазина».</small>
+							</div>
+							<div class="form-group">
+								<label for="paypear_api_base_url">API base URL</label>
+								<input
+									type="text"
+								id="paypear_api_base_url"
+								name="paypear_api_base_url"
+								value="{{ settings.paypear_api_base_url or 'https://engine.paypear.io/api/v1' }}"
+							/>
+						</div>
+						<div class="form-group">
+							<label for="paypear_payment_lifetime_minutes">Время жизни счёта (мин)</label>
+							<input
+								type="text"
+								id="paypear_payment_lifetime_minutes"
+								name="paypear_payment_lifetime_minutes"
+								value="{{ settings.paypear_payment_lifetime_minutes or '60' }}"
+							/>
+						</div>
+					</div>
+					<div class="settings-subsection settings-provider-card">
+						<div class="settings-subsection-head">
+							<h3>CryptoBot</h3>
+							<span class="settings-chip settings-chip-muted">крипта</span>
+						</div>
+						<div class="form-group password-wrapper">
+							<label for="cryptobot_token">Токен</label>
+							<input
+								type="password"
+								id="cryptobot_token"
+								name="cryptobot_token"
+								value="{{ settings.cryptobot_token or '' }}"
+							/>
+							<button type="button" class="toggle-password">👁️</button>
+						</div>
+					</div>
+					<div class="settings-subsection settings-provider-card">
+						<div class="settings-subsection-head">
+							<h3>Heleket</h3>
+							<span class="settings-chip settings-chip-muted">эквайринг</span>
+						</div>
+						<div class="form-group">
+							<label for="heleket_merchant_id">Merchant ID</label>
+							<input
+								type="text"
+								id="heleket_merchant_id"
+								name="heleket_merchant_id"
+								value="{{ settings.heleket_merchant_id or '' }}"
+							/>
+						</div>
+						<div class="form-group password-wrapper">
+							<label for="heleket_api_key">API key</label>
+							<input
+								type="password"
+								id="heleket_api_key"
+								name="heleket_api_key"
+								value="{{ settings.heleket_api_key or '' }}"
+							/>
+							<button type="button" class="toggle-password">👁️</button>
+						</div>
+						<div class="form-group">
+							<label for="domain">Домен магазина</label>
+							<input
+								type="text"
+								id="domain"
+								name="domain"
+								value="{{ settings.domain or '' }}"
+							/>
+						</div>
+					</div>
+					<div class="settings-subsection settings-provider-card">
+						<div class="settings-subsection-head">
+							<h3>TonConnect</h3>
+							<span class="settings-chip settings-chip-muted">TON</span>
+						</div>
+						<div class="form-group">
+							<label for="ton_wallet_address">TON-кошелёк</label>
+							<input
+								type="text"
+								id="ton_wallet_address"
+								name="ton_wallet_address"
+								value="{{ settings.ton_wallet_address or '' }}"
+							/>
+						</div>
+						<div class="form-group password-wrapper">
+							<label for="tonapi_key">TonAPI key</label>
+							<input
+								type="password"
+								id="tonapi_key"
+								name="tonapi_key"
+								value="{{ settings.tonapi_key or '' }}"
+							/>
+							<button type="button" class="toggle-password">👁️</button>
+						</div>
+					</div>
+				</div>
+			</section>
+
+				<section class="settings-section settings-group settings-group-delivery">
+					<h2>Выдача через Blitz (Hysteria 2)</h2>
+					<div class="form-group">
+						<label for="blitz_url">Blitz URL (с root path):</label>
+						<input
+							type="text"
+							id="blitz_url"
+							name="blitz_url"
+							placeholder="https://host:1312/<root_path>"
+							value="{{ settings.blitz_url or '' }}"
+						/>
+					</div>
+					<div class="form-group password-wrapper">
+						<label for="blitz_api_token">Blitz API Token (рекомендуется):</label>
+						<input
+							type="password"
+							id="blitz_api_token"
+							name="blitz_api_token"
+							value="{{ settings.blitz_api_token or '' }}"
+						/>
+						<button type="button" class="toggle-password">👁️</button>
+					</div>
+					<div class="form-group">
+						<label for="blitz_username">Blitz Username (fallback):</label>
+						<input
+							type="text"
+							id="blitz_username"
+							name="blitz_username"
+							value="{{ settings.blitz_username or '' }}"
+						/>
+					</div>
+					<div class="form-group password-wrapper">
+						<label for="blitz_password">Blitz Password (fallback):</label>
+						<input
+							type="password"
+							id="blitz_password"
+							name="blitz_password"
+							value="{{ settings.blitz_password or '' }}"
+						/>
+						<button type="button" class="toggle-password">👁️</button>
+					</div>
+					<div class="form-group form-group-checkbox">
+						<input type="hidden" name="enable_blitz" value="false" />
+						<input type="checkbox" id="enable_blitz" name="enable_blitz"
+						value="true" {% if settings.enable_blitz == 'true' %}checked{% endif
+						%}>
+						<label for="enable_blitz">Включить выдачу ключей через Blitz</label>
+					</div>
+					<div class="form-group form-group-checkbox">
+						<input type="hidden" name="blitz_insecure_tls" value="false" />
+						<input type="checkbox" id="blitz_insecure_tls" name="blitz_insecure_tls"
+						value="true" {% if settings.blitz_insecure_tls == 'true' %}checked{% endif
+						%}>
+						<label for="blitz_insecure_tls">Разрешить insecure TLS (только для self-signed)</label>
+					</div>
+				</section>
+
+			<section class="settings-section settings-group settings-group-operations">
+				<h2>Delivery SLA</h2>
+				<p class="settings-section-intro">Время от подтверждения оплаты до получения ключа пользователем.</p>
+				<div class="settings-subsection">
+					<div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;">
+						<div>
+							<h4 style="margin:0 0 .5rem">Последние 24 ч</h4>
+							{% if delivery_sla_24h and delivery_sla_24h.count > 0 %}
+							<table class="settings-mini-table" style="width:100%;font-size:.9rem;">
+								<tr><td>p50</td><td style="text-align:right;">{{ "%.1f"|format(delivery_sla_24h.p50) }}s</td></tr>
+								<tr><td>p95</td><td style="text-align:right;{% if delivery_sla_24h.p95 > 120 %}color:#e53e3e{% elif delivery_sla_24h.p95 > 60 %}color:#d69e2e{% else %}color:#38a169{% endif %}">{{ "%.1f"|format(delivery_sla_24h.p95) }}s</td></tr>
+								<tr><td>p99</td><td style="text-align:right;">{{ "%.1f"|format(delivery_sla_24h.p99) }}s</td></tr>
+								<tr><td>Транзакций</td><td style="text-align:right;">{{ delivery_sla_24h.count }}</td></tr>
+							</table>
+							{% else %}
+							<p class="settings-inline-note"><small>Нет данных</small></p>
+							{% endif %}
+						</div>
+						<div>
+							<h4 style="margin:0 0 .5rem">Последние 7 дней</h4>
+							{% if delivery_sla_7d and delivery_sla_7d.count > 0 %}
+							<table class="settings-mini-table" style="width:100%;font-size:.9rem;">
+								<tr><td>p50</td><td style="text-align:right;">{{ "%.1f"|format(delivery_sla_7d.p50) }}s</td></tr>
+								<tr><td>p95</td><td style="text-align:right;{% if delivery_sla_7d.p95 > 120 %}color:#e53e3e{% elif delivery_sla_7d.p95 > 60 %}color:#d69e2e{% else %}color:#38a169{% endif %}">{{ "%.1f"|format(delivery_sla_7d.p95) }}s</td></tr>
+								<tr><td>p99</td><td style="text-align:right;">{{ "%.1f"|format(delivery_sla_7d.p99) }}s</td></tr>
+								<tr><td>Транзакций</td><td style="text-align:right;">{{ delivery_sla_7d.count }}</td></tr>
+							</table>
+							{% else %}
+							<p class="settings-inline-note"><small>Нет данных</small></p>
+							{% endif %}
+						</div>
+					</div>
+				</div>
+			</section>
+
+			<section class="settings-section settings-group settings-group-operations">
+				<h2>Технические работы</h2>
+				<div class="form-group form-group-checkbox">
+					<input type="hidden" name="maintenance_mode" value="false" />
+					<input type="checkbox" id="maintenance_mode" name="maintenance_mode"
+					value="true" {% if settings.maintenance_mode == 'true' %}checked{% endif %}>
+					<label for="maintenance_mode">Включить глобальный режим обслуживания (блокирует все покупки)</label>
+				</div>
+					<div class="form-group">
+						<label for="maintenance_message">Сообщение для пользователей во время техработ:</label>
+						<textarea id="maintenance_message" name="maintenance_message" rows="2">{{ settings.maintenance_message or 'Покупка временно недоступна, ведутся технические работы. Попробуйте позже.' }}</textarea>
+					</div>
+				<div class="form-group form-group-checkbox">
+					<input type="hidden" name="main_service_mode_enabled" value="false" />
+					<input
+						type="checkbox"
+						id="main_service_mode_enabled"
+						name="main_service_mode_enabled"
+						value="true"
+						{% if settings.main_service_mode_enabled == 'true' %}checked{% endif %}
+					/>
+					<label for="main_service_mode_enabled">Включить заглушку основного бота с переходом в резервный</label>
+				</div>
+				<div class="form-group">
+					<label for="main_service_mode_message">Сообщение заглушки основного бота:</label>
+					<textarea id="main_service_mode_message" name="main_service_mode_message" rows="2">{{ settings.main_service_mode_message or 'Уважаемые пользователи, в данный момент покупка ключей доступна только в резервном боте — @probelvpnbot' }}</textarea>
+				</div>
+				<div class="form-group">
+					<label for="main_service_mode_reserve_bot_url">Ссылка на резервного бота в заглушке:</label>
+					<input
+						type="text"
+						id="main_service_mode_reserve_bot_url"
+						name="main_service_mode_reserve_bot_url"
+						value="{{ settings.main_service_mode_reserve_bot_url or 'https://t.me/probelvpnbot' }}"
+					/>
+				</div>
+				</section>
+
+				<section class="settings-section settings-group settings-group-operations">
+					<h2>Watchdog и Telegram-алерты</h2>
+					<div class="form-group password-wrapper">
+						<label for="alert_telegram_bot_token">Telegram Bot Token для алертов:</label>
+						<input
+							type="password"
+							id="alert_telegram_bot_token"
+							name="alert_telegram_bot_token"
+							value="{{ settings.alert_telegram_bot_token or '' }}"
+							placeholder="123456:ABC..."
+						/>
+						<button type="button" class="toggle-password">👁️</button>
+					</div>
+					<div class="form-group">
+						<label for="alert_telegram_chat_id">Telegram Chat ID:</label>
+						<input
+							type="text"
+							id="alert_telegram_chat_id"
+							name="alert_telegram_chat_id"
+							value="{{ settings.alert_telegram_chat_id or '' }}"
+							placeholder="-1001234567890"
+						/>
+					</div>
+					<div class="form-group">
+						<label for="alert_telegram_thread_id">Thread ID (опционально, forum topic):</label>
+						<input
+							type="text"
+							id="alert_telegram_thread_id"
+							name="alert_telegram_thread_id"
+							value="{{ settings.alert_telegram_thread_id or '' }}"
+							placeholder="42"
+						/>
+					</div>
+					<small>
+						Если поля заполнены, watchdog будет слать алерты о strict-падении Shop в этот Telegram-чат.
+						Переменные окружения ALERT_TELEGRAM_* имеют приоритет над значениями из UI.
+					</small>
+				</section>
+
+				<section class="settings-section settings-group settings-group-operations">
+					<h2>Telegram message effects</h2>
+					<p class="settings-section-intro">
+						Эффекты применяются только к новым сообщениям в личном чате. На переходы через
+						редактирование текущего сообщения Telegram их не рисует.
+					</p>
+					<div class="settings-subsection">
+						<div class="form-group">
+							<label for="welcome_message_effect_id">Effect ID для welcome-экрана</label>
+							<input
+								type="text"
+								id="welcome_message_effect_id"
+								name="welcome_message_effect_id"
+								value="{{ settings.welcome_message_effect_id or '' }}"
+								placeholder="Например: 5104841245755180586"
+							/>
+						</div>
+						<div class="form-group">
+							<label for="onboarding_success_message_effect_id">Effect ID после первого входа</label>
+							<input
+								type="text"
+								id="onboarding_success_message_effect_id"
+								name="onboarding_success_message_effect_id"
+								value="{{ settings.onboarding_success_message_effect_id or '' }}"
+								placeholder="Сообщение «Приятного использования!»"
+							/>
+						</div>
+						<div class="form-group">
+							<label for="trial_success_message_effect_id">Effect ID для trial-успеха</label>
+							<input
+								type="text"
+								id="trial_success_message_effect_id"
+								name="trial_success_message_effect_id"
+								value="{{ settings.trial_success_message_effect_id or '' }}"
+								placeholder="После успешной выдачи пробного ключа"
+							/>
+						</div>
+						<div class="form-group">
+							<label for="purchase_success_message_effect_id">Effect ID для покупки и продления</label>
+							<input
+								type="text"
+								id="purchase_success_message_effect_id"
+								name="purchase_success_message_effect_id"
+								value="{{ settings.purchase_success_message_effect_id or '' }}"
+								placeholder="Финальное сообщение после оплаты"
+							/>
+						</div>
+					</div>
+				</section>
+
+				<section class="settings-section settings-group settings-group-showcase">
+					<h2>Тексты и ссылки</h2>
+				<div class="form-group">
+					<label for="about_text">Текст "О проекте":</label>
+					<textarea id="about_text" name="about_text" rows="3">
+{{
+							settings.about_text or ""
+						}}</textarea
+					>
+				</div>
+				<div class="form-group">
+					<label for="support_text">Текст в разделе "Поддержка":</label>
+					<textarea id="support_text" name="support_text" rows="3">
+{{
+							settings.support_text or ""
+						}}</textarea
+					>
+				</div>
+				<div class="form-group">
+					<label for="terms_url">URL "Условия использования":</label>
+					<input
+						type="url"
+						id="terms_url"
+						name="terms_url"
+						value="{{ settings.terms_url or '' }}"
+					/>
+				</div>
+				<div class="form-group">
+					<label for="privacy_url">URL "Политика конфиденциальности":</label>
+					<input
+						type="url"
+						id="privacy_url"
+						name="privacy_url"
+						value="{{ settings.privacy_url or '' }}"
+					/>
+				</div>
+			</section>
+
+			<section class="settings-section settings-group settings-group-showcase">
+				<h2>Первый вход и инструкции</h2>
+				<div class="form-group">
+					<label for="channel_url"
+						>URL Telegram-канала для первого входа:</label
+					>
+					<input
+						type="url"
+						id="channel_url"
+						name="channel_url"
+						value="{{ settings.channel_url or '' }}"
+					/>
+				</div>
+				<div class="form-group form-group-checkbox">
+					<input type="hidden" name="force_subscription" value="false" />
+					<input type="checkbox" id="force_subscription"
+					name="force_subscription" value="true" {% if
+					settings.force_subscription == 'true' %}checked{% endif %}>
+					<label for="force_subscription"
+						>Требовать подписку на канал перед началом работы</label
+					>
+				</div>
+			    <div class="form-group">
+					<label for="android_url">URL "Инструкция Андроид":</label>
+					<input
+						type="url"
+						id="android_url"
+						name="android_url"
+						value="{{ settings.android_url or '' }}"
+					/>
+				</div>
+				<div class="form-group">
+					<label for="ios_url">URL "Инструкция iOS":</label>
+					<input
+						type="url"
+						id="ios_url"
+						name="ios_url"
+						value="{{ settings.ios_url or '' }}"
+					/>
+				</div>
+				<div class="form-group">
+					<label for="windows_url">URL "Инструкция Windows":</label>
+					<input
+						type="url"
+						id="windows_url"
+						name="windows_url"
+						value="{{ settings.windows_url or '' }}"
+					/>
+				</div>
+				<div class="form-group">
+					<label for="linux_url">URL "Инструкция Linux":</label>
+					<input
+						type="url"
+						id="linux_url"
+						name="linux_url"
+						value="{{ settings.linux_url or '' }}"
+					/>
+				</div>
+			</section>
+
+			<div class="settings-form-actions">
+				<div class="settings-form-actions-copy">
+					<strong>Сохранение настроек</strong>
+					<span
+						>Применяет изменения формы и сохраняет текущую конфигурацию панели.</span
+					>
+				</div>
+				<button type="submit" class="button button-primary">
+					Сохранить изменения
+				</button>
+			</div>
+		</form>
+	</div>
+</div>
+
+<script>
+var hostStatusPollTimer = null;
+var hostStatusPollInFlight = false;
+var HOST_STATUS_POLL_INTERVAL_MS = 10000;
+
+function _normalizeHostStatus(status) {
+	var value = String(status || 'unknown').trim().toLowerCase();
+	var allowed = ['healthy', 'degraded', 'unavailable', 'maintenance', 'unknown'];
+	return allowed.indexOf(value) >= 0 ? value : 'unknown';
+}
+
+function _formatHostCheckAt(value) {
+	if (!value) return '';
+	var text = String(value).trim();
+	if (!text) return '';
+	return text.replace('T', ' ').slice(0, 19);
+}
+
+function _applyHostStatusToCard(card, host) {
+	if (!card || !host) return;
+
+	var status = _normalizeHostStatus(host.status);
+	var badge = card.querySelector('[data-host-status-badge]');
+	if (badge) {
+		badge.className = 'host-status host-status-' + status;
+		badge.textContent = status;
+	}
+
+	var errorEl = card.querySelector('[data-host-error]');
+	if (errorEl) {
+		var errorText = String(host.last_error || '').trim();
+		if (errorText) {
+			errorEl.hidden = false;
+			errorEl.textContent = 'Ошибка: ' + errorText.slice(0, 180);
+		} else {
+			errorEl.hidden = true;
+			errorEl.textContent = '';
+		}
+	}
+
+	var checkEl = card.querySelector('[data-host-check]');
+	if (checkEl) {
+		var checkText = _formatHostCheckAt(host.last_check_at);
+		if (checkText) {
+			checkEl.hidden = false;
+			checkEl.textContent = 'Проверка: ' + checkText;
+		} else {
+			checkEl.hidden = true;
+			checkEl.textContent = '';
+		}
+	}
+
+	var syncTimeEl = card.querySelector('[data-host-sync-time]');
+	if (syncTimeEl) {
+		var syncTimeText = _formatHostCheckAt(host.node_synced_at);
+		if (syncTimeText) {
+			syncTimeEl.hidden = false;
+			syncTimeEl.textContent = 'Node sync: ' + syncTimeText;
+		} else {
+			syncTimeEl.hidden = true;
+			syncTimeEl.textContent = '';
+		}
+	}
+
+	var syncErrorEl = card.querySelector('[data-host-sync-error]');
+	if (syncErrorEl) {
+		var syncErrorText = String(host.node_sync_error || '').trim();
+		if (syncErrorText) {
+			syncErrorEl.hidden = false;
+			syncErrorEl.textContent = 'Node sync ошибка: ' + syncErrorText.slice(0, 240);
+		} else {
+			syncErrorEl.hidden = true;
+			syncErrorEl.textContent = '';
+		}
+	}
+
+	var isMaintenance = !!host.is_maintenance;
+	var maintenanceToggle = card.querySelector('.host-maintenance-toggle');
+	if (maintenanceToggle && document.activeElement !== maintenanceToggle) {
+		maintenanceToggle.checked = isMaintenance;
+	}
+
+	var maintenanceLabel = card.querySelector('[data-host-maintenance-label]');
+	if (maintenanceLabel) {
+		maintenanceLabel.textContent = isMaintenance ? 'Вкл' : 'Выкл';
+	}
+}
+
+function refreshHostStatuses() {
+	if (hostStatusPollInFlight) return;
+	var hostCards = Array.from(document.querySelectorAll('.host-card[data-host-card]'));
+	if (!hostCards.length) return;
+
+	hostStatusPollInFlight = true;
+	fetch('/api/hosts/status', {
+		method: 'GET',
+		headers: {'Accept': 'application/json'},
+		cache: 'no-store',
+	})
+		.then(function (response) {
+			if (!response.ok) {
+				throw new Error('status ' + response.status);
+			}
+			return response.json();
+		})
+		.then(function (payload) {
+			var byHost = {};
+			(payload.hosts || []).forEach(function (host) {
+				byHost[String(host.host_name || '')] = host;
+			});
+
+			hostCards.forEach(function (card) {
+				var hostName = String(card.dataset.hostCard || '');
+				var host = byHost[hostName];
+				if (!host) return;
+				_applyHostStatusToCard(card, host);
+			});
+		})
+		.catch(function (error) {
+			console.warn('Host status refresh failed:', error);
+		})
+		.finally(function () {
+			hostStatusPollInFlight = false;
+		});
+}
+
+function initHostStatusAutoRefresh() {
+	var hasHostCards = !!document.querySelector('.host-card[data-host-card]');
+	if (!hasHostCards) return;
+
+	refreshHostStatuses();
+	if (hostStatusPollTimer) {
+		clearInterval(hostStatusPollTimer);
+	}
+	hostStatusPollTimer = setInterval(refreshHostStatuses, HOST_STATUS_POLL_INTERVAL_MS);
+
+	document.addEventListener('visibilitychange', function () {
+		if (!document.hidden) {
+			refreshHostStatuses();
+		}
+	});
+}
+
+function toggleHostMaintenance(checkbox) {
+	var hostName = checkbox.dataset.host;
+	var enabled = checkbox.checked;
+	fetch('/api/host/' + encodeURIComponent(hostName) + '/maintenance', {
+		method: 'POST',
+		headers: {'Content-Type': 'application/json'},
+		body: JSON.stringify({enabled: enabled})
+	}).then(function(r) { return r.json(); })
+	.then(function(data) {
+		var span = checkbox.parentElement.querySelector('span');
+		if (span) span.textContent = enabled ? 'Вкл' : 'Выкл';
+		refreshHostStatuses();
+	}).catch(function(err) {
+		checkbox.checked = !enabled;
+		alert('Ошибка: ' + err.message);
+	});
+}
+
+function initSettingsGroupTabs() {
+	var rightColumn = document.querySelector('.settings-column-right');
+	var tabs = Array.from(document.querySelectorAll('.settings-group-tab'));
+	var sections = Array.from(document.querySelectorAll('.settings-column-right .settings-group'));
+	if (!rightColumn || !tabs.length || !sections.length) return;
+
+	rightColumn.classList.add('settings-grouped');
+
+	function activateGroup(groupName) {
+		tabs.forEach(function (tab) {
+			var isActive = tab.dataset.settingsGroup === groupName;
+			tab.classList.toggle('is-active', isActive);
+			tab.setAttribute('aria-selected', isActive ? 'true' : 'false');
+		});
+
+		sections.forEach(function (section) {
+			var isActive = section.classList.contains('settings-group-' + groupName);
+			section.classList.toggle('is-active', isActive);
+		});
+	}
+
+	tabs.forEach(function (tab) {
+		tab.addEventListener('click', function () {
+			activateGroup(tab.dataset.settingsGroup);
+		});
+	});
+
+	var requestedGroup = new URLSearchParams(window.location.search).get('group');
+	var requestedTab = tabs.find(function (tab) { return tab.dataset.settingsGroup === requestedGroup; });
+	var defaultTab = requestedTab || tabs.find(function (tab) { return tab.classList.contains('is-active'); }) || tabs[0];
+	activateGroup(defaultTab.dataset.settingsGroup);
+}
+
+function initSettingsDeepLink() {
+	var params = new URLSearchParams(window.location.search);
+	var hostName = params.get('host');
+	if (!hostName) return;
+	var escapedHostName = window.CSS && CSS.escape ? CSS.escape(hostName) : hostName.replace(/"/g, '\\"');
+	var card = document.querySelector('.host-card[data-host-card="' + escapedHostName + '"]');
+	if (!card) return;
+	card.scrollIntoView({block: 'center'});
+	card.classList.add('host-card-highlight');
+	window.setTimeout(function () {
+		card.classList.remove('host-card-highlight');
+	}, 1600);
+}
+
+function initSettingsDialogs() {
+	var dialogs = Array.from(document.querySelectorAll('.settings-dialog'));
+	if (!dialogs.length) return;
+
+	function syncBodyModalState() {
+		document.body.classList.toggle('modal-open', dialogs.some(function (dialog) { return dialog.open; }));
+	}
+
+	function focusDialogStart(dialog) {
+		var initialControl = dialog.querySelector('[data-dialog-initial-focus]');
+		if (initialControl) initialControl.focus();
+	}
+
+	document.querySelectorAll('[data-dialog-open]').forEach(function (trigger) {
+		trigger.addEventListener('click', function () {
+			var dialog = document.getElementById(trigger.dataset.dialogOpen);
+			if (!dialog || typeof dialog.showModal !== 'function') return;
+			dialog.showModal();
+			syncBodyModalState();
+			focusDialogStart(dialog);
+		});
+	});
+
+	document.querySelectorAll('[data-dialog-close]').forEach(function (trigger) {
+		trigger.addEventListener('click', function () {
+			var dialog = trigger.closest('dialog');
+			if (dialog) dialog.close();
+		});
+	});
+
+	dialogs.forEach(function (dialog) {
+		dialog.addEventListener('close', syncBodyModalState);
+		dialog.addEventListener('cancel', syncBodyModalState);
+	});
+}
+
+function initHostTokenSources() {
+	document.querySelectorAll('[data-token-source]').forEach(function (source) {
+		var radios = Array.from(source.querySelectorAll('input[name="host_api_token_mode"]'));
+		var panels = Array.from(source.querySelectorAll('[data-token-panel]'));
+		if (!radios.length || !panels.length) return;
+
+		function syncPanels() {
+			var activeRadio = radios.find(function (radio) { return radio.checked; }) || radios[0];
+			var activeMode = activeRadio.value;
+			panels.forEach(function (panel) {
+				var isActive = panel.dataset.tokenPanel === activeMode;
+				panel.hidden = !isActive;
+				panel.querySelectorAll('input, select, textarea').forEach(function (control) {
+					control.disabled = !isActive;
+				});
+			});
+		}
+
+		radios.forEach(function (radio) {
+			radio.addEventListener('change', syncPanels);
+		});
+		syncPanels();
+	});
+}
+
+document.addEventListener('DOMContentLoaded', function () {
+	initSettingsGroupTabs();
+	initSettingsDeepLink();
+	initSettingsDialogs();
+	initHostTokenSources();
+	initHostStatusAutoRefresh();
+});
+</script>
+
+{% endblock %}

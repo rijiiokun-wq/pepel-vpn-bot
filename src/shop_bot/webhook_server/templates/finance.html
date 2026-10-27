@@ -1,0 +1,290 @@
+{% extends "base.html" %}
+{% block title %}Финансы · Бета версия! Свяжитесь с администратором{% endblock %}
+{% block extra_head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/finance.css') }}?v=20261015">
+{% endblock %}
+{% block content %}
+{% set profile = finance.profile | default({}, true) %}
+{% set selected_period = finance.period | default('month', true) | string %}
+{% set daily = finance.gross_by_day | default([], true) %}
+{% set monthly = finance.gross_by_month | default([], true) %}
+{% set history = finance.history | default({}, true) %}
+{% set has_history = history.projects is defined and history.projects | length > 0 %}
+{% set history_failed = finance.history_error | default(false) or (finance.history_configured | default(false) and not has_history) %}
+{% set payouts = history.payouts | default({}, true) %}
+{% set live_payouts = finance.payout_live | default({}, true) %}
+{% set profile_has_balance = profile.balance is defined and profile.balance is not none %}
+{% set profile_is_stale = profile.stale | default(false) or profile.status | default('') not in ['ok', 'success', 'ready'] %}
+{% macro money(value) -%}
+  {% if value is defined and value is not none %}{{ value | finance_money }} <span class="finance-unit">₽</span>{% else %}<span class="finance-unknown">Нет данных</span>{% endif %}
+{%- endmacro %}
+{% macro source_number(value) -%}
+  {% if value is defined and value is not none and value != '' %}{{ value }}{% else %}<span class="finance-unknown">Нет данных</span>{% endif %}
+{%- endmacro %}
+<div class="finance-page">
+  {% if finance.preview_mode | default(false) %}<aside class="finance-preview" aria-label="Режим предпросмотра"><strong>Локальный предпросмотр</strong><span>Рабочая админка не изменена</span></aside>{% endif %}
+  <header class="finance-heading">
+    <div>
+      <p class="finance-eyebrow">LAVA · Финансовый обзор</p>
+      <h1>Финансы</h1>
+      <p class="finance-intro"><strong>Бета версия! Свяжитесь с администратором</strong></p>
+      <p class="finance-intro">Поступления по проектам и общий баланс платёжного профиля.</p>
+    </div>
+    <span class="finance-badge finance-badge--neutral">Только просмотр</span>
+  </header>
+
+  <aside class="finance-coverage {{ 'finance-coverage--history' if has_history else '' }}" aria-labelledby="finance-coverage-title">
+    <span class="finance-coverage-symbol" aria-hidden="true">i</span>
+    <div>
+      {% if history_failed %}
+      <h2 id="finance-coverage-title">Не удалось загрузить историю LAVA</h2>
+      <p>Суммы по проектам временно недоступны. Общий баланс профиля проверяется отдельно.</p>
+      {% elif has_history %}
+      <h2 id="finance-coverage-title">История «Пепла» и «Подписок» загружена</h2>
+      {% if history.live is defined %}
+      <p>Пепел: новые оплаты поступают автоматически из уведомлений LAVA и журнала бота.</p>
+      {% if history.subscriptions_live is defined %}
+      {% set subscriptions_live = history.subscriptions_live %}
+      {% if subscriptions_live.last_webhook %}<p>Подписки: уведомления LAVA принимаются автоматически с точной суммой после комиссии.</p>
+      {% else %}<p>Подписки: приёмник готов. Ожидается подключение пересылки уведомлений администратором бота.</p>{% endif %}
+      {% if not subscriptions_live.backfill_complete %}<p>История Подписок после выгрузки 15.10.2026 неполная: требуется дослать пропущенные уведомления и сверить итог.</p>{% endif %}
+      {% if subscriptions_live.pending_net %}<p>У {{ subscriptions_live.pending_net }} оплат Подписок не передана точная сумма зачисления.</p>{% endif %}
+      {% if subscriptions_live.requires_reconciliation %}<p>В Подписках есть возврат или расхождение сумм. Требуется сверка.</p>{% endif %}
+      {% else %}<p>Подписки: сохранённая выгрузка LAVA.</p>{% endif %}
+      {% if history.live.stale %}<p>Автоматическая сверка Пепла задерживается. Показаны последние сохранённые данные.</p>{% endif %}
+      {% if history.live.pending_net %}<p>У {{ history.live.pending_net }} оплат нет точной суммы зачисления. Доходы учтены, остаток неполный.</p>{% endif %}
+      {% if history.live.requires_reconciliation %}<p>Есть возврат или расхождение новых данных. Требуется сверка.</p>{% endif %}
+      {% else %}<p>Данные обоих проектов — из разовых выгрузок LAVA. Новые операции появятся после обновления истории.</p>{% endif %}
+      {% if history.recorded_at %}<p class="finance-caption">История загружена: {{ history.recorded_at_label | default(history.recorded_at, true) }}</p>{% endif %}
+      {% else %}
+      <h2 id="finance-coverage-title">Доступен проект «Пепел»</h2>
+      <p>«Подписки» не подключены. Распределение выводов недоступно до сверки остатков.</p>
+      <p class="finance-caption">Пустые показатели означают отсутствие данных, а не нулевую сумму.</p>
+      {% endif %}
+    </div>
+  </aside>
+
+  <section class="finance-card finance-profile" aria-labelledby="finance-profile-title">
+    <div class="finance-section-head">
+      <div>
+        <p class="finance-eyebrow">Общий для двух проектов</p>
+        <h2 id="finance-profile-title">Баланс профиля LAVA</h2>
+      </div>
+      {% if profile_has_balance %}
+        <span class="finance-badge {{ 'finance-badge--warning' if profile_is_stale else 'finance-badge--success' }}">{{ 'Требует обновления' if profile_is_stale else 'Получен из LAVA' }}</span>
+      {% else %}
+        <span class="finance-badge finance-badge--neutral">{{ 'Временно недоступен' if profile.configured | default(false) else 'Не подключён' }}</span>
+      {% endif %}
+    </div>
+    <p class="finance-muted">Средства «Пепла» и «Подписок» вместе. Этот баланс нельзя целиком отнести к «Пеплу».</p>
+    <dl class="finance-balance-grid">
+      <div class="finance-balance-item finance-balance-item--main"><dt>Всего на профиле</dt><dd>{{ money(profile.balance) }}</dd></div>
+      <div class="finance-balance-item"><dt>Доступно к выводу</dt><dd>{{ money(profile.active_balance) }}</dd></div>
+      <div class="finance-balance-item"><dt>Заморожено</dt><dd>{{ money(profile.freeze_balance) }}</dd></div>
+    </dl>
+    <div class="finance-profile-foot">
+      <p class="finance-caption">{% if profile.checked_at %}Проверено: {{ profile.checked_at }}{% else %}Время успешной проверки неизвестно{% endif %}</p>
+      <p class="finance-caption">Баланс на момент проверки; выбор периода ниже его не меняет.</p>
+    </div>
+    {% if profile_is_stale and profile_has_balance %}<p class="finance-state-note" role="status">Показаны последние полученные значения. Используйте их с учётом времени проверки.</p>{% elif not profile_has_balance %}<p class="finance-state-note" role="status">{% if profile.configured | default(false) %}Не удалось получить баланс.{% if not history_failed %} Подтверждённые поступления ниже остаются доступны.{% endif %}{% else %}Баланс появится после подключения профиля LAVA.{% endif %}</p>{% endif %}
+  </section>
+
+  {% set balance = finance.pepel_availability | default({}, true) %}
+  {% if finance.pepel_availability is defined %}{% include "finance_pepel_balance.html" %}{% endif %}
+
+  {% if history_failed %}
+  <section class="finance-card finance-history-error" aria-labelledby="finance-history-error-title" role="status">
+    <h2 id="finance-history-error-title">История требует проверки</h2>
+    <p class="finance-muted">Не удалось прочитать сохранённые данные LAVA. Поступления, возвраты и выводы по проектам сейчас не показаны.</p>
+    <p class="finance-caption">Недоступные суммы не заменены нулями или данными другого источника.</p>
+  </section>
+  {% else %}
+  <nav class="finance-section-nav" aria-label="Разделы финансов">
+    <a href="#finance-income">Поступления</a>
+    <a href="#finance-projects">По проектам</a>
+    <a href="#finance-payouts">Выводы</a>
+    <a href="#finance-allocation">Распределение</a>
+  </nav>
+
+  <section id="finance-income" class="finance-card" aria-labelledby="finance-income-title">
+    <div class="finance-section-head">
+      <div><p class="finance-eyebrow">{{ 'Пепел и Подписки' if has_history else 'Проект «Пепел»' }}</p><h2 id="finance-income-title">{{ 'Успешные оплаты' if has_history else 'Подтверждённые поступления' }}</h2></div>
+      <span class="finance-badge finance-badge--neutral">{{ 'По выгрузкам LAVA' if has_history else 'До комиссий' }}</span>
+    </div>
+    {% if has_history %}
+    <p class="finance-muted">Оба проекта за выбранный период. Даты взяты из выгрузок без пересчёта часового пояса.</p>
+    {% else %}
+    <p class="finance-muted">Оплаты по журналу «Пепла». Полная история операций LAVA пока не сверена.</p>
+    {% if finance.journal_error | default(false) %}<p class="finance-state-note" role="status">Не удалось прочитать журнал «Пепла». Данные о поступлениях временно недоступны.</p>{% endif %}
+    {% if finance.missing_dates | default(0) or finance.uncertain_dates | default(0) %}
+    <aside class="finance-date-warning" aria-label="Точность дат оплат">
+      <strong>Даты требуют сверки</strong>
+      {% if finance.missing_dates | default(0) %}<p>Оплат без распознаваемой даты: {{ finance.missing_dates | number_format }}. Они не включены в суммы выбранного периода.</p>{% endif %}
+      {% if finance.uncertain_dates | default(0) %}<p>У {{ finance.uncertain_dates | number_format }} оплат часовой пояс не подтверждён; распределение по датам требует сверки.</p>{% endif %}
+    </aside>
+    {% endif %}
+    {% endif %}
+    <form method="get" action="{{ request.path }}" class="finance-period-form" aria-label="Период поступлений">
+      <fieldset class="finance-period-presets">
+        <legend>{{ 'Период по датам выгрузки' if has_history else 'Период · МСК' }}</legend>
+        <div class="finance-preset-list">
+          {% for value, label in [('today', 'Сегодня'), ('yesterday', 'Вчера'), ('7', '7 дней'), ('30', '30 дней'), ('month', 'Этот месяц'), ('previous_month', 'Прошлый месяц'), ('all', 'Вся история')] %}
+          {% if value != 'all' or has_history %}
+          <button type="submit" name="period" value="{{ value }}" class="finance-preset {{ 'finance-preset--active' if selected_period == value else '' }}" aria-pressed="{{ 'true' if selected_period == value else 'false' }}">{{ label }}</button>
+          {% endif %}
+          {% endfor %}
+        </div>
+      </fieldset>
+    </form>
+    <details class="finance-custom-period" {% if selected_period == 'range' %}open{% endif %}>
+      <summary>Выбрать даты</summary>
+      <form method="get" action="{{ request.path }}" class="finance-range-form">
+        <input type="hidden" name="period" value="range">
+        <div><label for="finance-date-from">С</label><input id="finance-date-from" type="date" name="date_from" value="{{ finance.start | default('', true) }}" required></div>
+        <div><label for="finance-date-to">По, включительно</label><input id="finance-date-to" type="date" name="date_to" value="{{ finance.end | default('', true) }}" required></div>
+        <button type="submit" class="finance-apply">Показать</button>
+      </form>
+    </details>
+    {% if finance.start and finance.end %}<p class="finance-period-caption">{{ finance.start | ru_date }} — {{ finance.end | ru_date }}{% if not has_history %} · МСК{% endif %}</p>{% endif %}
+    <div class="finance-income-grid">
+      <div class="finance-income-total"><span>{{ 'Сумма успешных оплат двух проектов' if has_history else 'Выручка «Пепла» за период' }}</span><p>{{ money(finance.gross_rub) }}</p><small>{{ 'Счета с текущим статусом «Успех» в выгрузках.' if has_history else 'Сумма подтверждённых оплат до удержания комиссий.' }}</small></div>
+      <div class="finance-income-count"><span>{{ 'Успешных оплат' if has_history else 'Подтверждённых оплат' }}</span><p>{% if finance.count is defined and finance.count is not none %}{{ finance.count | number_format }}{% else %}<span class="finance-unknown">Нет данных</span>{% endif %}</p><small>За выбранный период</small></div>
+    </div>
+    <p class="finance-accounting-note">{{ 'Счета со статусом возврата показаны отдельно по проектам ниже.' if has_history else 'Выручка не равна прибыли. Для расчёта прибыли нужны комиссии, возвраты и расходы проекта.' }}</p>
+
+    <details class="finance-detail-table" open>
+      <summary>Поступления по дням</summary>
+      {% if daily %}
+      <div class="finance-table-scroll finance-table-scroll--daily" tabindex="0" role="region" aria-label="{{ 'Успешные оплаты двух проектов по дням' if has_history else 'Поступления Пепла по дням' }}">
+        <table class="finance-table"><caption class="finance-visually-hidden">{{ 'Успешные оплаты двух проектов' if has_history else 'Подтверждённые оплаты проекта «Пепел»' }} по дням выбранного периода</caption><thead><tr><th scope="col">{{ 'Дата из выгрузки' if has_history else 'Дата · МСК' }}</th><th scope="col" class="finance-number-cell">Оплат</th><th scope="col" class="finance-number-cell">{{ 'Сумма успешных оплат' if has_history else 'Выручка до комиссий' }}</th></tr></thead><tbody>
+        {% for day in daily %}<tr><th scope="row">{{ day.date | ru_date }}</th><td class="finance-number-cell">{% if day.count is defined and day.count is not none %}{{ day.count | number_format }}{% else %}<span class="finance-unknown">Нет данных</span>{% endif %}</td><td class="finance-number-cell">{{ money(day.gross_rub) }}</td></tr>{% endfor %}
+        </tbody></table>
+      </div>
+      {% else %}<div class="finance-empty finance-empty--compact"><h3>{% if finance.count is defined and finance.count == 0 %}В этом периоде успешных оплат нет{% else %}Данные по дням недоступны{% endif %}</h3><p>{% if finance.count is defined and finance.count == 0 %}{{ 'В загруженной истории нет успешных оплат за выбранные даты.' if has_history else 'В журнале «Пепла» нет подтверждённых оплат за выбранные даты.' }}{% else %}Итоговые суммы выше не распределены по дням.{% endif %}</p></div>{% endif %}
+    </details>
+    {% if monthly %}<details class="finance-detail-table"><summary>Поступления по месяцам</summary><div class="finance-table-scroll" tabindex="0" role="region" aria-label="Поступления по месяцам"><table class="finance-table"><caption class="finance-visually-hidden">Успешные оплаты по месяцам в пределах выбранного периода</caption><thead><tr><th scope="col">Месяц</th><th scope="col" class="finance-number-cell">Оплат</th><th scope="col" class="finance-number-cell">{{ 'Сумма успешных оплат' if has_history else 'Выручка до комиссий' }}</th></tr></thead><tbody>{% for month in monthly %}<tr><th scope="row">{{ month.label | default(month.date, true) }}</th><td class="finance-number-cell">{% if month.count is defined and month.count is not none %}{{ month.count | number_format }}{% else %}<span class="finance-unknown">Нет данных</span>{% endif %}</td><td class="finance-number-cell">{{ money(month.gross_rub) }}</td></tr>{% endfor %}</tbody></table></div></details>{% endif %}
+  </section>
+
+  <section id="finance-projects" class="finance-card" aria-labelledby="finance-projects-title">
+    <div class="finance-section-head"><div><p class="finance-eyebrow">Раздельный учёт</p><h2 id="finance-projects-title">Пепел и Подписки</h2></div><span class="finance-badge {{ 'finance-badge--neutral' if has_history else 'finance-badge--warning' }}">{{ 'За выбранный период' if has_history else 'Данные неполные' }}</span></div>
+    <p class="finance-muted">Поступления — за выбранный период. Остатки по проектам требуют отдельной сверки.</p>
+    {% if has_history %}
+    <div class="finance-table-scroll" tabindex="0" role="region" aria-label="Успешные оплаты и возвраты по проектам">
+      <table class="finance-table finance-project-table finance-project-table--history">
+        <caption class="finance-visually-hidden">Успешные оплаты и счета с возвратом по каждому проекту за выбранный период</caption>
+        <thead><tr><th scope="col">Проект</th><th scope="col">Успешные оплаты</th><th scope="col">Поле «Выручка» LAVA</th><th scope="col">Счета с возвратом</th><th scope="col">Распределённые выводы</th><th scope="col">Доступный остаток</th></tr></thead>
+        <tbody>{% for project in history.projects %}<tr>
+          <th scope="row"><span class="finance-project-name">{{ project.name }}</span><span class="finance-project-status">История загружена</span></th>
+          <td><strong>{{ money(project.gross_rub) }}</strong><span class="finance-cell-detail">Оплат: {{ project.count | number_format }}</span></td>
+          <td>{{ money(project.source_revenue_rub) }}<span class="finance-cell-detail">По успешным оплатам</span></td>
+          <td><strong>{{ money(project.refund_amount_rub) }}</strong><span class="finance-cell-detail">Счетов: {{ project.refund_count | number_format }}</span><span class="finance-cell-detail">Поле «Выручка»: {{ money(project.refund_source_revenue_rub) }}</span></td>
+          <td class="finance-unknown">Нет данных</td><td>{% if project.project_id == 'pepel' %}<strong data-pepel-available>{{ balance.available_label | default('Требует сверки') }}</strong><span class="finance-cell-detail">Расчёт по истории · на текущий момент</span>{% else %}<span class="finance-unknown">Нет данных</span>{% endif %}</td>
+        </tr>{% endfor %}</tbody>
+      </table>
+    </div>
+    <div class="finance-source-notes">
+      <p><strong>«Выручка»</strong> — поле исходной выгрузки; для новых оплат Пепла используется точная сумма зачисления из уведомления LAVA. Это не прибыль. Если сумма зачисления не передана, она не рассчитывается приблизительно.</p>
+      <p><strong>Возвраты</strong> — счета с текущим статусом «Успешный возврат». Они не входят в успешные оплаты и повторно из них не вычитаются. Дата платежа не означает дату возврата.</p>
+    </div>
+    <div class="finance-project-details">
+      {% for project in history.projects %}
+      <details class="finance-detail-table">
+        <summary>{{ project.name }}: по дням и охват истории</summary>
+        <div class="finance-source-coverage">
+          <p><strong>В исходной выгрузке: {{ project.row_count | number_format }} строк.</strong> {% for status, total in (project.status_counts | default({}, true)).items() %}{{ status }}: {{ total | number_format }}{{ ' · ' if not loop.last else '' }}{% endfor %}</p>
+          {% if project.first_created_at and project.last_created_at %}<p>Создание счетов: {{ project.first_created_at }} — {{ project.last_created_at }}.</p>{% endif %}
+          {% if project.first_paid_at and project.last_paid_at %}<p>Даты платежей: {{ project.first_paid_at }} — {{ project.last_paid_at }}.</p>{% endif %}
+          <p>Границы исходной выгрузки не меняются при выборе периода. Часовой пояс в выгрузке не указан.</p>
+        </div>
+        {% if project.daily %}
+        <div class="finance-table-scroll finance-table-scroll--daily" tabindex="0" role="region" aria-label="Показатели проекта {{ project.name }} по дням">
+          <table class="finance-table finance-project-daily-table"><caption class="finance-visually-hidden">{{ project.name }} за выбранный период, по календарным датам выгрузки</caption><thead><tr><th scope="col">Дата</th><th scope="col" class="finance-number-cell">Успешных оплат</th><th scope="col" class="finance-number-cell">Сумма оплат</th><th scope="col" class="finance-number-cell">Поле «Выручка»</th><th scope="col" class="finance-number-cell">Счетов с возвратом</th><th scope="col" class="finance-number-cell">Сумма счетов с возвратом</th></tr></thead><tbody>
+          {% for day in project.daily %}<tr><th scope="row">{{ day.date | ru_date }}</th><td class="finance-number-cell">{{ day.count | number_format }}</td><td class="finance-number-cell">{{ money(day.gross_rub) }}</td><td class="finance-number-cell">{{ money(day.source_revenue_rub) }}</td><td class="finance-number-cell">{{ day.refund_count | number_format }}</td><td class="finance-number-cell">{{ money(day.refund_amount_rub) }}</td></tr>{% endfor %}
+          </tbody></table>
+        </div>
+        {% else %}<p class="finance-muted">В загруженной истории этого проекта нет успешных оплат или счетов с возвратом за выбранные даты.</p>{% endif %}
+      </details>
+      {% endfor %}
+    </div>
+    {% else %}
+    <div class="finance-table-scroll" tabindex="0" role="region" aria-label="Сравнение финансов проектов">
+      <table class="finance-table finance-project-table"><caption class="finance-visually-hidden">Доступность показателей проектов «Пепел» и «Подписки»</caption><thead><tr><th scope="col">Проект</th><th scope="col">Выручка</th><th scope="col">Комиссии</th><th scope="col">После комиссий и возвратов</th><th scope="col">Выведено</th><th scope="col">Доступный остаток</th></tr></thead><tbody>
+        <tr><th scope="row"><span class="finance-project-name">Пепел</span><span class="finance-project-status {{ 'finance-project-status--warning' if finance.journal_error | default(false) else '' }}">{{ 'Журнал недоступен' if finance.journal_error | default(false) else 'Журнал доступен' }}</span></th><td>{{ money(finance.gross_rub) }}</td><td class="finance-unknown">Нет данных</td><td class="finance-unknown">Нет данных</td><td class="finance-unknown">Нет данных</td><td class="finance-unknown">Нет данных</td></tr>
+        <tr><th scope="row"><span class="finance-project-name">Подписки</span><span class="finance-project-status finance-project-status--muted">Не подключён</span></th><td class="finance-unknown">Нет данных</td><td class="finance-unknown">Нет данных</td><td class="finance-unknown">Нет данных</td><td class="finance-unknown">Нет данных</td><td class="finance-unknown">Нет данных</td></tr>
+      </tbody></table>
+    </div>
+    {% endif %}
+    <p class="finance-caption">Общий баланс LAVA показан выше отдельно. Он не распределён между проектами.</p>
+  </section>
+
+  <div class="finance-bottom-grid {{ 'finance-bottom-grid--history' if has_history else '' }}">
+    <section id="finance-payouts" class="finance-card" aria-labelledby="finance-payouts-title">
+      <div class="finance-section-head"><h2>Автоматический учёт выводов</h2><span class="finance-badge finance-badge--neutral">Только учёт</span></div>
+      {% if live_payouts.error | default(false) %}
+      <p class="finance-state-note">Журнал выводов временно недоступен. Остатки требуют сверки.</p>
+      {% elif live_payouts.last_webhook | default(false) %}
+      <p class="finance-muted">Последнее уведомление LAVA: {{ live_payouts.last_webhook | finance_time }}. Статусы проверяются автоматически.</p>
+      {% elif live_payouts.receiver_ready | default(false) %}
+      <p class="finance-muted">Приёмник выводов готов. Подключение уведомлений в профиле LAVA ещё не подтверждено.</p>
+      {% else %}<p class="finance-muted">Уведомления о новых выводах ещё не подключены.</p>{% endif %}
+      {% if live_payouts.unsupported_count | default(0) %}<p class="finance-state-note">Получено неподдерживаемое уведомление LAVA. До проверки его формата остатки требуют сверки.</p>{% endif %}
+      {% if live_payouts.unverified_count | default(0) %}<p class="finance-state-note">Ожидают проверки через LAVA: {{ live_payouts.unverified_count }}. До проверки доступный остаток требует сверки.</p>{% endif %}
+      {% if live_payouts.rows | default([], true) %}
+      <div class="finance-table-scroll finance-table-scroll--payouts" tabindex="0" role="region" aria-label="Новые выводы LAVA">
+        <table class="finance-table finance-payout-table"><thead><tr><th>Получено уведомление · МСК</th><th>Статус</th><th>Списание с комиссией</th><th>Комиссия</th><th>Учёт по проектам</th></tr></thead><tbody>
+        {% for payout in live_payouts.rows %}<tr>
+          <th scope="row">{{ payout.first_seen | finance_time }}</th>
+          <td>{{ {'created':'Создан','pending':'Обрабатывается','success':'Успешно','rejected':'Отклонён, деньги возвращены'}.get(payout.status, 'Требует проверки') }}</td>
+          <td class="finance-number-cell">{{ money(payout.debit_rub) }}</td>
+          <td class="finance-number-cell">{{ money(payout.fee_rub) }}</td>
+          <td>{% if payout.conflict %}Расхождение, требуется сверка{% elif payout.status == 'rejected' %}Не уменьшает остаток{% elif payout.allocation %}{% for item in payout.allocation.allocations %}{{ 'Пепел' if item.project_id == 'pepel' else 'Подписки' }}: {{ money(item.debit_cents / 100) }}{% if not loop.last %}<br>{% endif %}{% endfor %}{% else %}Ожидает распределения{% endif %}</td>
+        </tr>{% endfor %}</tbody></table>
+      </div>
+      {% endif %}
+      <p class="finance-caption">Новые выводы показаны независимо от выбранного периода, чтобы незавершённые списания оставались видны. Время получения уведомления не является временем списания. Комиссия уже входит в списанную сумму. Повторные уведомления не создают повторных списаний.</p>
+      <p class="finance-caption">Для автоматического обнаружения выводов владелец профиля должен указать выплатной webhook: <code>https://pepelbot.com/webhooks/lava/payout-finance</code>. Пока подключение не подтверждено, полнота новых выводов не гарантируется.</p>
+      {% if has_history and payouts.row_count is defined %}
+      <div class="finance-section-head"><div><p class="finance-eyebrow">Общий профиль LAVA</p><h2 id="finance-payouts-title">История выводов</h2></div><span class="finance-badge finance-badge--neutral">{{ payouts.total_selected_count | default(payouts.selected_count | default(payouts.rows | default([], true) | length)) | number_format }} за период</span></div>
+      {% if payouts.api_rows | default([], true) %}
+      <p class="finance-muted">Подтверждённые выводы общего профиля. Списанные суммы и комиссии указаны в рублях.</p>
+      <div class="finance-table-scroll finance-table-scroll--payouts" tabindex="0" role="region" aria-label="Выводы, подтверждённые LAVA">
+        <table class="finance-table finance-payout-table finance-payout-table--verified"><caption class="finance-visually-hidden">Успешные выводы, проверенные через API LAVA. Суммы в рублях до конвертации в USDT.</caption>
+          <thead><tr><th scope="col">Дата отправки · МСК</th><th scope="col">Статус</th><th scope="col">Способ</th><th scope="col" class="finance-number-cell">Списано</th><th scope="col" class="finance-number-cell">Комиссия</th><th scope="col" class="finance-number-cell">После комиссии, до конвертации</th></tr></thead>
+          <tbody>{% for payout in payouts.api_rows %}<tr>
+            <th scope="row" class="finance-payout-date">{{ payout.date }}</th>
+            <td><strong>Успешно</strong><span class="finance-cell-detail">Подтверждено LAVA {{ payout.verified_at | ru_date }}</span></td>
+            <td>USDT · TRC20</td>
+            <td class="finance-number-cell">{{ money(payout.amount_pay_rub) }}</td>
+            <td class="finance-number-cell">{{ money(payout.fee_rub) }}</td>
+            <td class="finance-number-cell">{{ money(payout.amount_receive_rub) }}</td>
+          </tr>{% endfor %}</tbody>
+        </table>
+      </div>
+      <p class="finance-caption">Источник — проверка статуса через API LAVA. Дата отправки взята из сохранённого запроса. Выводы не распределены между Пеплом и Подписками.</p>
+      {% endif %}
+      <p class="finance-muted">Ниже — исходные поля выгрузки выводов. Единицы и смысл сумм требуют сверки; общий итог списания не рассчитан.</p>
+      {% if payouts.rows %}
+      <div class="finance-table-scroll finance-table-scroll--payouts" tabindex="0" role="region" aria-label="Исходные поля истории выводов">
+        <table class="finance-table finance-payout-table"><caption class="finance-visually-hidden">Выводы за выбранный период. Числа сохранены из выгрузки без обозначения валюты.</caption><thead><tr><th scope="col">Дата из выгрузки</th><th scope="col">Статус</th><th scope="col">Тип</th><th scope="col" class="finance-number-cell">Сумма выплаты</th><th scope="col" class="finance-number-cell">Сумма списания</th><th scope="col" class="finance-number-cell">Комиссия</th></tr></thead><tbody>{% for payout in payouts.rows %}<tr><th scope="row" class="finance-payout-date">{{ payout.date }}</th><td>{{ 'Выполнен' if payout.status == 'success' else payout.status }}</td><td>{{ payout.type }}</td><td class="finance-number-cell">{{ source_number(payout.amount_field) }}</td><td class="finance-number-cell">{{ source_number(payout.debit_field) }}</td><td class="finance-number-cell">{{ source_number(payout.fee_field) }}</td></tr>{% endfor %}</tbody></table>
+      </div>
+      {% else %}<div class="finance-empty finance-empty--compact"><h3>В выгрузке за этот период записей нет</h3><p>В исходной выгрузке не найдено выводов за выбранные даты.</p></div>{% endif %}
+      <p class="finance-caption finance-payout-caption">Всего в исходной выгрузке: {{ payouts.row_count | number_format }}.{% if payouts.api_row_count | default(0) %} Дополнительно подтверждено через API: {{ payouts.api_row_count | number_format }}.{% endif %} Выводы пока не распределены между проектами.</p>
+      {% else %}
+      <div class="finance-section-head"><h2 id="finance-payouts-title">Выводы средств</h2><span class="finance-badge finance-badge--neutral">Нет данных</span></div>
+      <div class="finance-empty"><span class="finance-empty-icon" aria-hidden="true">↗</span><h3>История выводов не загружена</h3><p>Ручные выводы из кабинета LAVA пока не сверены. Отсутствие записей здесь не означает, что выводов не было.</p></div>
+      <p class="finance-caption">Для учёта нужны дата, сумма списания, комиссия и подтверждённый статус каждого вывода.</p>
+      {% endif %}
+    </section>
+    <section id="finance-allocation" class="finance-card" aria-labelledby="finance-allocation-title">
+      <div class="finance-section-head"><h2 id="finance-allocation-title">Распределение выводов</h2><span class="finance-badge finance-badge--warning">Ожидает сверки</span></div>
+      <p class="finance-muted">Общий вывод распределяется пропорционально доступным остаткам проектов перед выводом.</p>
+      <div class="finance-allocation-projects"><div><span>Пепел</span><strong>Доля не рассчитана</strong></div><div><span>Подписки</span><strong>Доля не рассчитана</strong></div></div>
+      <p class="finance-caption">Доли фиксируются на момент вывода. Новые поступления не меняют уже распределённые суммы.</p>
+      <p class="finance-state-note">{{ 'Доступные остатки проектов перед выводами пока неизвестны. Для распределения нужна их сверка.' if has_history else 'Расчёт станет доступен после сверки остатков обоих проектов и истории выводов.' }}</p>
+      {% if has_history %}<p class="finance-caption finance-integration-note">Новые оплаты учитываются по уведомлениям LAVA. Для точного распределения нужны полная история и срок заморозки Подписок, а также подтверждённый момент списания. До сверки новый вывод учитывается в общем журнале, а доступный остаток Пепла блокируется, чтобы не завысить его.</p>{% endif %}
+    </section>
+  </div>
+  {% endif %}
+</div>
+{% if finance.pepel_availability is defined %}<script src="{{ url_for('static', filename='js/finance_availability.js') }}?v=20261018" defer></script>{% endif %}
+{% endblock %}

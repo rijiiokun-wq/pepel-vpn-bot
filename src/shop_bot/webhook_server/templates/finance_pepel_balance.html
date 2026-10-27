@@ -1,0 +1,16 @@
+<section id="finance-pepel-balance" class="finance-card" aria-labelledby="finance-pepel-balance-title" data-refresh-url="{{ url_for('pepel_balance_fragment') }}">
+  <div class="finance-section-head">
+    <div><p class="finance-eyebrow">Пепел · суточная заморозка</p><h2 id="finance-pepel-balance-title">Расчётный незамороженный остаток</h2></div>
+    <span class="finance-badge finance-badge--warning">{{ 'Требует сверки' if balance.status == 'unavailable' else ('Неполные данные' if balance.status == 'partial' else ('Автоматический учёт' if balance.live_enabled else 'По загруженной истории')) }}</span>
+  </div>
+  <dl class="finance-balance-grid">
+    <div class="finance-balance-item finance-balance-item--main"><dt>Доступно по расчёту</dt><dd class="finance-pepel-available-source">{{ balance.available_label | default('Требует сверки') }}</dd></div>
+    {% if balance.frozen_label %}<div class="finance-balance-item"><dt>Ещё заморожено в загруженной истории</dt><dd>{{ balance.frozen_label }}</dd></div>{% endif %}
+  </dl>
+  {% if balance.next_release_label %}<p>Следующая разморозка: <strong>{{ balance.next_release_amount_label }}</strong> · {{ balance.next_release_label }}.</p>{% endif %}
+  <p class="finance-muted">СБП и карты: 24 часа с момента оплаты. Отсчёт от полного вывода общего доступного баланса 16.10.2026 в 13:09 МСК. Суммы — после комиссии приёма платежей.</p>
+  {% if balance.exported_at_label %}<p class="finance-caption">Выгрузка Пепла: {{ balance.exported_at_label }}. Пересчитано: {{ balance.checked_at_label }}.</p>{% endif %}
+  {% if balance.live_enabled %}<p class="finance-caption">Сверка новых оплат с ботом: {{ balance.sync_label }}.</p>{% endif %}
+  <p class="finance-state-note">{{ balance.notice | default('Обновите и сверьте историю Пепла.') }}</p>
+  <p class="finance-caption" data-refresh-status>Автопересчёт раз в минуту. Выбор периода поступлений этот остаток не меняет.</p>
+</section>

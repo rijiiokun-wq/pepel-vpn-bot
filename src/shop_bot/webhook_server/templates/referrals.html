@@ -1,0 +1,177 @@
+{% extends "base.html" %}
+{% block title %}Реферальная программа{% endblock %}
+{% block extra_head %}
+<style>
+.referral-summary ~ .settings-section a:not(.button),
+.referral-summary ~ .settings-section a:not(.button):visited { color:var(--primary-color); text-underline-offset:3px; }
+.referral-summary ~ .settings-section a:not(.button):hover { color:var(--shell-accent); }
+.referral-summary ~ .settings-section a:not(.button):focus-visible { outline:2px solid var(--shell-accent); outline-offset:4px; border-radius:2px; }
+.referral-summary { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:14px; margin:20px 0; }
+.referral-stat { padding:18px; border:1px solid var(--shell-border-soft); border-radius:12px; background:var(--surface); color:var(--light-color); }
+.referral-stat strong { display:block; font-size:1.5rem; margin-top:8px; }
+.referral-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:16px; }
+.referral-scroll { overflow-x:auto; }
+.referral-table { width:100%; border-collapse:collapse; font-size:.9rem; }
+.referral-table th,.referral-table td { padding:12px 10px; border-bottom:1px solid var(--border-color); text-align:left; vertical-align:top; }
+.referral-table th { white-space:nowrap; }
+.referral-table .money { white-space:nowrap; text-align:right; font-variant-numeric:tabular-nums; }
+.referral-table small { display:block; margin-top:4px; color:var(--muted); }
+.referral-note { padding:14px 16px; border-radius:8px; background:var(--surface-raised); color:var(--light-color); line-height:1.5; }
+.referral-warning { background:rgba(252,196,25,.09); border:1px solid rgba(252,196,25,.35); }
+.referral-toolbar,.referral-pagination { display:flex; flex-wrap:wrap; align-items:center; gap:12px; margin:16px 0; }
+.referral-toolbar input { min-width:220px; }
+.referral-pagination { justify-content:flex-end; }
+.referral-details { min-width:270px; }
+.referral-details summary { cursor:pointer; font-weight:600; }
+.referral-details pre { white-space:pre-wrap; overflow-wrap:anywhere; font:inherit; }
+.referral-action { padding:14px 0; border-top:1px solid var(--border-color); }
+.referral-action textarea { width:100%; box-sizing:border-box; margin:8px 0; }
+.referral-action label { display:block; margin:10px 0; line-height:1.4; }
+.referral-badge { display:inline-block; padding:4px 9px; border-radius:12px; background:var(--surface-raised); white-space:nowrap; }
+.referral-badge--pending { background:rgba(252,196,25,.14); color:#ffda6a; }
+.referral-badge--paid { background:rgba(81,207,102,.14); color:#9aefab; }
+.referral-badge--rejected { background:rgba(255,107,107,.14); color:#ffaaaa; }
+.referral-button { background:#44505e; color:#fff; border:1px solid #8996a4; }
+.referral-button:hover { background:#536171; }
+.referral-button:focus-visible { outline:2px solid var(--shell-accent); outline-offset:3px; }
+</style>
+{% endblock %}
+{% macro money(value) -%}{{ "%.2f"|format(value or 0)|replace('.', ',') }} ₽{%- endmacro %}
+{% macro user_link(id, username) -%}
+<a href="{{ url_for('referrals_page', user_id=id, q=query, status=withdrawal_status) }}#participant">{{ '@' ~ username if username else id }}</a>{% if username %}<small>ID {{ id }}</small>{% endif %}
+{%- endmacro %}
+{% block content %}
+<section class="admin-page-head">
+  <h1>Реферальная программа</h1>
+  <p class="settings-page-intro admin-page-intro">Настройки, участники, начисления и ручная обработка заявок на вывод.</p>
+  <p><strong>Статус: {{ 'включена' if policy.enabled else 'выключена' }}</strong></p>
+  {% if not policy.enabled %}<p class="referral-note">Новые реферальные связи, скидки и начисления отключены. Существующие балансы сохраняются. Уже поданные заявки можно обработать; новые заявки отключены.</p>{% endif %}
+</section>
+
+<section class="settings-section admin-section-card">
+  <h2>Условия программы</h2>
+  <form method="post" action="{{ url_for('referral_settings_route') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+    <div class="referral-grid">
+      <div class="form-group"><label for="referral_percentage">Пригласившему с каждой покупки, %</label><input id="referral_percentage" name="referral_percentage" type="number" min="0" max="100" step="0.01" required value="{{ policy.percentage }}" /></div>
+      <div class="form-group"><label for="referral_discount">Приглашённому на первую покупку, %</label><input id="referral_discount" name="referral_discount" type="number" min="0" max="99.99" step="0.01" required value="{{ policy.discount }}" /></div>
+      <div class="form-group"><label for="minimum_withdrawal">Минимум к выводу, ₽</label><input id="minimum_withdrawal" name="minimum_withdrawal" type="number" min="0.01" max="1000000000000" step="0.01" required value="{{ policy.minimum }}" /></div>
+    </div>
+    <p>Вознаграждение рассчитывается от оплаченной суммы. Скидка действует только на первую покупку приглашённого, кроме промотарифов. Новые условия не пересчитывают историю.</p>
+    <div class="form-group form-group-checkbox"><input type="hidden" name="enable_referrals" value="false" /><input type="checkbox" id="enable_referrals" name="enable_referrals" value="true" {% if policy.enabled %}checked{% endif %} /><label for="enable_referrals">Включить реферальную программу</label></div>
+    <button class="button button-primary" type="submit">Сохранить условия</button>
+  </form>
+</section>
+
+{% set summary = dashboard.summary %}
+<section class="referral-summary" aria-label="Сводка по всей программе">
+  <div class="referral-stat">Участников<strong>{{ summary.users_count }}</strong></div>
+  <div class="referral-stat">Приглашённых<strong>{{ summary.referred_users_count }}</strong></div>
+  <div class="referral-stat">Доступно к выводу<strong>{{ money(summary.balance) }}</strong></div>
+  <div class="referral-stat">В заявках / резерве<strong>{{ money(summary.reserved) }}</strong></div>
+  <div class="referral-stat">Начислено за всё время*<strong>{{ money(summary.lifetime) }}</strong></div>
+  <div class="referral-stat">Отмечено выплаченным<strong>{{ money(summary.paid) }}</strong></div>
+  <div class="referral-stat">Ожидают решения<strong>{{ summary.pending_count }}</strong></div>
+</section>
+<p class="referral-note {% if summary.legacy_lifetime_incomplete %}referral-warning{% endif %}">* Исторический счётчик перенесён как есть. {% if summary.legacy_lifetime_incomplete %}В старых данных есть неполная история начислений; сумма «за всё время» не отражает все прошлые выплаты и бонусы.{% else %}Выплаты в новой системе учитываются отдельно; старые ручные выплаты могут отсутствовать в журнале.{% endif %} Доступный баланс и резерв показаны отдельно.</p>
+
+<section class="settings-section admin-section-card" id="participants">
+  <h2>Участники и их рефералы</h2>
+  <form class="referral-toolbar" method="get" action="{{ url_for('referrals_page') }}">
+    <input type="search" name="q" value="{{ query }}" placeholder="Telegram ID или username" aria-label="Поиск участника" />
+    <input type="hidden" name="status" value="{{ withdrawal_status }}" />
+    <button type="submit" class="button button-primary">Найти</button>
+    {% if query %}<a href="{{ url_for('referrals_page', status=withdrawal_status) }}#participants">Сбросить</a>{% endif %}
+    <span>Найдено: {{ dashboard.users_total }}</span>
+  </form>
+  <div class="referral-scroll"><table class="referral-table">
+    <thead><tr><th>Участник</th><th>Пригласил</th><th>Рефералов</th><th class="money">Доступно</th><th class="money">В резерве</th><th class="money">Всего начислено*</th></tr></thead>
+    <tbody>{% for user in dashboard.users %}<tr>
+      <td>{{ user_link(user.telegram_id, user.username) }}</td>
+      <td>{% if user.referred_by %}{{ user_link(user.referred_by, user.referrer_username) }}{% else %}—{% endif %}</td>
+      <td>{{ user.referral_count }}</td><td class="money">{{ money(user.balance) }}</td><td class="money">{{ money(user.reserved) }}</td><td class="money">{{ money(user.lifetime) }}</td>
+    </tr>{% else %}<tr><td colspan="6">Участники не найдены.</td></tr>{% endfor %}</tbody>
+  </table></div>
+  <nav class="referral-pagination" aria-label="Страницы участников">
+    {% if page > 1 %}<a href="{{ url_for('referrals_page', q=query, page=page-1, status=withdrawal_status) }}#participants">← Назад</a>{% endif %}
+    <span>Страница {{ page }}</span>
+    {% if has_more_users %}<a href="{{ url_for('referrals_page', q=query, page=page+1, status=withdrawal_status) }}#participants">Далее →</a>{% endif %}
+  </nav>
+</section>
+
+{% if selected_user %}
+<section class="settings-section admin-section-card" id="participant">
+  <h2>Участник {{ '@' ~ selected_user.username if selected_user.username else selected_user.telegram_id }} · ID {{ selected_user.telegram_id }}</h2>
+  <p>Доступно: <strong>{{ money(selected_user.balance) }}</strong> · В резерве: <strong>{{ money(selected_user.reserved) }}</strong> · Начислено за всё время*: {{ money(selected_user.lifetime) }}</p>
+  {% if selected_user.referred_by %}<p>Пригласил: {{ user_link(selected_user.referred_by, selected_user.referrer_username) }}</p>{% endif %}
+  <h3>Приглашённые пользователи ({{ selected_user.referral_count }})</h3>
+  <div class="referral-scroll"><table class="referral-table"><thead><tr><th>Пользователь</th><th>Дата регистрации</th><th class="money">Всего потратил</th></tr></thead><tbody>
+  {% for invited in selected_user.referrals %}<tr><td>{{ user_link(invited.telegram_id, invited.username) }}</td><td>{{ invited.registration_date|referral_date }}</td><td class="money">{{ money(invited.total_spent) }}</td></tr>{% else %}<tr><td colspan="3">Пока нет приглашённых пользователей.</td></tr>{% endfor %}
+  </tbody></table></div>
+  <h3>Скидка на первую покупку</h3>
+  <p class="referral-note">Скидка закрепляется за одним счётом. Все следующие счета создаются по полной цене. Если ответ платёжного сервиса не получен, скидка остаётся за первым счётом до проверки его состояния. Освободить её можно только после подтверждения, что этот счёт больше нельзя оплатить.</p>
+  <div class="referral-scroll"><table class="referral-table"><thead><tr><th>Создан</th><th>Платёжный сервис / счёт</th><th>Статус</th><th class="money">К оплате</th><th class="money">Скидка</th></tr></thead><tbody>
+    {% for invoice in selected_user.discount_invoices %}<tr><td>{{ invoice.created_at|referral_date }}</td><td>{{ invoice.provider }}<small>{{ invoice.payment_id or 'Номер счёта ещё не получен' }}</small></td><td>{{ {'full_price':'Без скидки','reserved':'Создаётся счёт со скидкой','issued':'Счёт со скидкой создан','uncertain':'Нужна проверка платёжного сервиса','consumed':'Скидка использована','cancelled':'Счёт отменён'}.get(invoice.status, invoice.status) }}</td><td class="money">{{ money(invoice.price_cents / 100) }}</td><td class="money">{{ money(invoice.discount_cents / 100) }}</td></tr>{% else %}<tr><td colspan="5">Новых счетов ещё нет.</td></tr>{% endfor %}
+  </tbody></table></div>
+</section>
+{% endif %}
+
+<section class="settings-section admin-section-card" id="withdrawals">
+  <h2>Заявки на вывод</h2>
+  <p class="referral-note">Деньги переводит администратор вручную. Кнопка «Отметить выплаченным» только фиксирует уже сделанный перевод. При отклонении резерв возвращается в доступный баланс; новые начисления не затрагиваются.</p>
+  <form class="referral-toolbar" method="get" action="{{ url_for('referrals_page') }}#withdrawals">
+    <input type="hidden" name="q" value="{{ query }}" />
+    <label for="withdrawal_status">Статус заявки</label>
+    <select id="withdrawal_status" name="status">{% for value,label in [('pending','Ожидают решения'),('paid','Выплаченные'),('rejected','Отклонённые'),('all','Вся история')] %}<option value="{{ value }}" {% if withdrawal_status == value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select>
+    <button type="submit" class="button referral-button">Показать</button>
+  </form>
+  <div class="referral-scroll"><table class="referral-table"><thead><tr><th>Заявка</th><th>Участник</th><th class="money">Сумма</th><th>Статус</th><th>Реквизиты и решение</th></tr></thead><tbody>
+    {% for item in withdrawals %}<tr>
+      <td>#{{ item.id }}<small>{{ item.created_at|referral_date }}</small><small>Источник: {{ item.source }}</small></td>
+      <td>{{ user_link(item.user_id, item.username) }}</td><td class="money">{{ money(item.amount) }}</td>
+      <td><span class="referral-badge referral-badge--{{ item.status }}">{{ {'pending':'Ожидает','paid':'Выплачена','rejected':'Отклонена'}.get(item.status,item.status) }}</span>{% if item.resolved_at %}<small>{{ item.resolved_at|referral_date }}</small><small>{{ item.admin_id }}</small>{% endif %}{% if item.notification_status %}<small><a href="#notifications" data-withdrawal-notification="{{ item.id }}">Уведомление: {{ {'pending':'в очереди','sending':'отправляется','sent':'отправлено','failed':'ошибка'}.get(item.notification_status, item.notification_status) }}</a></small>{% endif %}</td>
+      <td><details class="referral-details"><summary>{{ 'Реквизиты и действия' if item.status == 'pending' else 'Реквизиты и комментарий' }}</summary><pre>{{ item.details }}</pre>
+        {% if item.note %}<p><strong>Комментарий:</strong> {{ item.note }}</p>{% endif %}
+        {% if item.status == 'pending' %}
+        <form class="referral-action" method="post" action="{{ url_for('referral_withdrawal_route', withdrawal_id=item.id, action='paid') }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+          <label for="paid-note-{{ item.id }}">Комментарий или номер перевода</label><textarea id="paid-note-{{ item.id }}" name="note" maxlength="1000" rows="2"></textarea>
+          <label><input type="checkbox" name="manual_payment_confirmed" value="true" required /> Я уже перевёл {{ money(item.amount) }} по реквизитам этой заявки</label>
+          <button type="submit" class="button button-primary">Отметить выплаченным</button>
+        </form>
+        <form class="referral-action" method="post" action="{{ url_for('referral_withdrawal_route', withdrawal_id=item.id, action='rejected') }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+          <label for="reject-note-{{ item.id }}">Причина отклонения</label><textarea id="reject-note-{{ item.id }}" name="note" maxlength="1000" rows="2" required></textarea>
+          <button type="submit" class="button button-danger">Отклонить и вернуть резерв</button>
+        </form>
+        {% endif %}
+      </details></td>
+    </tr>{% else %}<tr><td colspan="5">Заявок с этим статусом нет.</td></tr>{% endfor %}
+  </tbody></table></div>
+  <nav class="referral-pagination" aria-label="Страницы заявок">
+    {% if withdrawal_page > 1 %}<a href="{{ url_for('referrals_page', q=query, status=withdrawal_status, withdrawal_page=withdrawal_page-1) }}#withdrawals">← Назад</a>{% endif %}<span>Страница {{ withdrawal_page }}</span>
+    {% if has_more_withdrawals %}<a href="{{ url_for('referrals_page', q=query, status=withdrawal_status, withdrawal_page=withdrawal_page+1) }}#withdrawals">Далее →</a>{% endif %}
+  </nav>
+</section>
+
+<section class="settings-section admin-section-card" id="notifications">
+  <h2>Уведомления о решениях по выводу</h2>
+  <p class="referral-note">Сначала показаны ошибки и ожидающие отправки, затем отправленные уведомления. Они отправляются через того бота, в котором подана заявка, даже при выключенной реферальной программе. «Отправлено» означает, что Telegram подтвердил приём сообщения, и не подтверждает его прочтение. Временные сбои повторяются автоматически; после окончательной ошибки можно повторить отправку вручную.</p>
+  <p id="notification-refresh-status" role="status" aria-live="polite">Статусы обновляются автоматически каждые 5 секунд.</p>
+  <div id="notification-live-content" data-status-url="{{ url_for('referral_notification_status_route', notification_page=notification_page, withdrawal_page=withdrawal_page, q=query, status=withdrawal_status) }}">
+    {% include "_referral_notifications.html" %}
+  </div>
+  <script defer src="{{ url_for('static', filename='js/referral-notifications.js') }}?v=20261018-1"></script>
+</section>
+
+<section class="settings-section admin-section-card" id="rewards">
+  <h2>Журнал начислений</h2><p>Всего записей: {{ dashboard.rewards_total }}. Старые балансы могут не иметь записей в журнале.</p>
+  <div class="referral-scroll"><table class="referral-table"><thead><tr><th>Дата</th><th>Пригласивший</th><th>Покупатель</th><th class="money">Оплачено</th><th class="money">Начислено</th><th>Платёж</th></tr></thead><tbody>
+    {% for reward in dashboard.rewards %}<tr><td>{{ reward.applied_at|referral_date }}</td><td>{{ user_link(reward.referrer_id, reward.referrer_username) }}</td><td>{{ user_link(reward.user_id, reward.buyer_username) }}</td><td class="money">{{ money(reward.amount_rub) }}</td><td class="money">{{ money(reward.reward) }}</td><td>{{ reward.payment_id }}</td></tr>{% else %}<tr><td colspan="6">Начислений в журнале пока нет.</td></tr>{% endfor %}
+  </tbody></table></div>
+  <nav class="referral-pagination" aria-label="Страницы начислений">
+    {% if reward_page > 1 %}<a href="{{ url_for('referrals_page', q=query, status=withdrawal_status, reward_page=reward_page-1) }}#rewards">← Назад</a>{% endif %}<span>Страница {{ reward_page }}</span>
+    {% if has_more_rewards %}<a href="{{ url_for('referrals_page', q=query, status=withdrawal_status, reward_page=reward_page+1) }}#rewards">Далее →</a>{% endif %}
+  </nav>
+</section>
+{% endblock %}

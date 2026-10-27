@@ -1,0 +1,807 @@
+{% extends "base.html" %}
+{% block title %}Миграция ключей{% endblock %}
+{% block content %}
+
+<h1>Миграция ключей</h1>
+<p class="settings-page-intro">
+	Массовая миграция и точечная выдача собраны в одном разделе.
+</p>
+
+<div class="migration-tabs" role="tablist" aria-label="Режимы миграции">
+	<button
+		type="button"
+		class="migration-tab-button"
+		id="migration-tab-bulk"
+		data-migration-tab="bulk"
+		role="tab"
+		aria-controls="migration-panel-bulk"
+		aria-selected="true"
+		onclick="switchMigrationTab('bulk')"
+	>
+		Общая
+	</button>
+	<button
+		type="button"
+		class="migration-tab-button"
+		id="migration-tab-issue"
+		data-migration-tab="issue"
+		role="tab"
+		aria-controls="migration-panel-issue"
+		aria-selected="false"
+		onclick="switchMigrationTab('issue')"
+	>
+		По ID
+	</button>
+	<button
+		type="button"
+		class="migration-tab-button"
+		id="migration-tab-marketing"
+		data-migration-tab="marketing"
+		role="tab"
+		aria-controls="migration-panel-marketing"
+		aria-selected="false"
+		onclick="switchMigrationTab('marketing')"
+		>
+			Маркетинг
+		</button>
+		<button
+			type="button"
+			class="migration-tab-button"
+			id="migration-tab-inbounds"
+			data-migration-tab="inbounds"
+			role="tab"
+			aria-controls="migration-panel-inbounds"
+			aria-selected="false"
+			onclick="switchMigrationTab('inbounds')"
+		>
+			Inbound sync
+		</button>
+		<button
+			type="button"
+			class="migration-tab-button"
+			id="migration-tab-trial-reset"
+			data-migration-tab="trial-reset"
+			role="tab"
+			aria-controls="migration-panel-trial-reset"
+			aria-selected="false"
+			onclick="switchMigrationTab('trial-reset')"
+		>
+			Сброс trial
+		</button>
+	</div>
+
+<section
+	id="migration-panel-bulk"
+	class="migration-tab-panel"
+	data-migration-panel="bulk"
+	role="tabpanel"
+	aria-labelledby="migration-tab-bulk"
+>
+	<p class="settings-page-intro">
+		Миграция существующих активных ключей со старых host-ов на MainPanel
+		по выбранному тарифу. Expired ключи пропускаются автоматически.
+	</p>
+
+	<div class="migration-layout">
+		<div class="migration-form-panel">
+			<div class="migration-section">
+				<h2>Параметры миграции</h2>
+
+				<div class="form-group">
+					<label for="mig-subscription-tier">Кого мигрировать</label>
+					<select id="mig-subscription-tier" class="migration-select">
+						<option value="super" selected>Супер</option>
+						<option value="standard">Стандарт</option>
+					</select>
+					<p class="migration-hint" style="margin-top: 6px;">
+						Целевой host всегда MainPanel. Тариф определяется из users.db; сомнительные клиенты попадут в ручную проверку.
+					</p>
+				</div>
+
+				<div class="form-group">
+					<label for="mig-gift-days">Бонусные дни</label>
+					<input type="number" id="mig-gift-days" value="0" min="0" max="365" class="migration-input-number" />
+					<p class="migration-hint" style="margin-top: 6px;">
+						Новый срок = текущий срок старого ключа + бонусные дни. Expired ключи не возрождаются.
+					</p>
+				</div>
+
+				<div class="form-group">
+					<label for="mig-incident-id">ID миграции</label>
+					<input type="text" id="mig-incident-id" value="" placeholder="MAINPANEL-2026-06-07" class="migration-input" />
+				</div>
+			</div>
+
+			<div class="migration-actions">
+				<button type="button" id="mig-btn-preview" class="button button-primary" onclick="migrationPreview()">
+					Превью (dry-run)
+				</button>
+				<button type="button" id="mig-btn-execute" class="button button-success" onclick="migrationExecute()" disabled>
+					Выполнить миграцию
+				</button>
+			</div>
+		</div>
+
+		<div class="migration-results-panel">
+			<div class="migration-section">
+				<h2>Результат</h2>
+
+				<div id="mig-status" class="migration-status" hidden>
+					<div id="mig-status-text" class="migration-status-text"></div>
+					<div id="mig-progress-bar-wrap" class="migration-progress-wrap" hidden>
+						<div id="mig-progress-bar" class="migration-progress-bar"></div>
+					</div>
+					<div id="mig-progress-detail" class="migration-progress-detail"></div>
+				</div>
+
+				<div id="mig-summary" class="migration-summary" hidden>
+					<div class="migration-summary-grid">
+						<div class="migration-summary-item">
+							<span class="migration-summary-label">Найдено</span>
+							<span id="mig-sum-total" class="migration-summary-value">0</span>
+						</div>
+						<div class="migration-summary-item migration-summary-ok">
+							<span class="migration-summary-label">К миграции</span>
+							<span id="mig-sum-will" class="migration-summary-value">0</span>
+						</div>
+						<div class="migration-summary-item migration-summary-ok">
+							<span class="migration-summary-label">Мигрировано</span>
+							<span id="mig-sum-migrated" class="migration-summary-value">0</span>
+						</div>
+						<div class="migration-summary-item migration-summary-skip">
+							<span class="migration-summary-label">Пропущено</span>
+							<span id="mig-sum-skipped" class="migration-summary-value">0</span>
+						</div>
+						<div class="migration-summary-item migration-summary-skip">
+							<span class="migration-summary-label">Ручная проверка</span>
+							<span id="mig-sum-review" class="migration-summary-value">0</span>
+						</div>
+						<div class="migration-summary-item migration-summary-err">
+							<span class="migration-summary-label">Ошибки</span>
+							<span id="mig-sum-errors" class="migration-summary-value">0</span>
+						</div>
+					</div>
+				</div>
+
+				<div id="mig-table-wrap" class="migration-table-wrap" hidden>
+					<table class="migration-table">
+						<thead>
+							<tr>
+								<th>User ID</th>
+								<th>Старый host</th>
+								<th>Email</th>
+								<th>Тариф</th>
+								<th>Старый срок</th>
+								<th>Бонус</th>
+								<th>Новый срок</th>
+								<th>Статус</th>
+							</tr>
+						</thead>
+						<tbody id="mig-table-body"></tbody>
+					</table>
+				</div>
+
+				<div id="mig-empty" class="migration-empty">
+					Запустите превью чтобы увидеть список ключей для миграции.
+				</div>
+			</div>
+		</div>
+	</div>
+</section>
+
+<section
+	id="migration-panel-issue"
+	class="migration-tab-panel"
+	data-migration-panel="issue"
+	role="tabpanel"
+	aria-labelledby="migration-tab-issue"
+	hidden
+>
+	<p class="settings-page-intro">
+		Ручная выдача ключа пользователю по Telegram ID: можно выдать новый ключ или заменить текущий.
+	</p>
+
+	<div class="issue-layout">
+		<div class="issue-panel">
+			<div class="issue-section">
+				<h2>Параметры выдачи</h2>
+
+				<div class="form-group">
+					<label for="issue-telegram-id">Telegram ID</label>
+					<input
+						type="text"
+						id="issue-telegram-id"
+						class="migration-input"
+						placeholder="123456789"
+						inputmode="numeric"
+					/>
+				</div>
+				<input type="hidden" id="issue-target-key-id" value="" />
+
+				<div class="migration-actions" style="margin-top: 8px;">
+					<button type="button" id="issue-btn-open-keys" class="button button-secondary" onclick="issueByIdOpenKeysModal()">
+						Открыть ключи пользователя
+					</button>
+					<button type="button" id="issue-btn-reset-target" class="button button-primary" onclick="issueByIdResetTargetKey()">
+						Сбросить выбранный ключ
+					</button>
+				</div>
+				<p id="issue-selected-key-hint" class="migration-hint" style="margin-top: 8px;">
+					Ключ не выбран. В режиме замены будет выбран автоматически по хосту.
+				</p>
+
+				<div class="form-group">
+					<label for="issue-host">Хост</label>
+					<select id="issue-host" class="migration-select">
+						<option value="">— выберите —</option>
+						{% for host in issue_hosts %}
+						<option
+							value="{{ host.host_name }}"
+							title="{{ host.host_url }}"
+							data-has-subscription-url="{{ 'true' if host.has_direct_subscription_url else 'false' }}"
+						>
+							{{ host.host_name }}
+						</option>
+						{% endfor %}
+					</select>
+				</div>
+
+				<div class="form-group">
+					<label for="issue-subscription-tier">Тариф</label>
+					<select id="issue-subscription-tier" class="migration-select">
+						<option value="super" selected>Супер</option>
+						<option value="standard">Стандарт</option>
+					</select>
+					<p id="issue-tier-hint" class="migration-hint" style="margin-top: 6px;">
+						Супер: WHITELIST — 40 ГБ/мес. Стандарт: WHITELIST — 5 ГБ/мес. Остальные серверы — безлимитные.
+					</p>
+				</div>
+
+				<div class="form-group">
+					<label for="issue-bot-source">Выдавать от бота</label>
+					<select id="issue-bot-source" class="migration-select">
+						<option value="main">Основной</option>
+						<option value="reserve" selected>Резервный</option>
+					</select>
+					<p class="migration-hint" style="margin-top: 6px;">
+						Выбранный бот будет использован для Telegram-уведомления и сохранён как источник ключа.
+					</p>
+				</div>
+
+				<div class="form-group">
+					<label>Срок доступа</label>
+					<div class="issue-duration-grid">
+						<div class="issue-duration-field">
+							<label for="issue-duration-days">Дни</label>
+							<input
+								type="number"
+								id="issue-duration-days"
+								value="30"
+								min="0"
+								max="3650"
+								class="migration-input-number"
+							/>
+						</div>
+						<div class="issue-duration-field">
+							<label for="issue-duration-months">Мес.</label>
+							<input
+								type="number"
+								id="issue-duration-months"
+								value="0"
+								min="0"
+								max="99"
+								class="migration-input-number"
+							/>
+						</div>
+						<div class="issue-duration-field">
+							<label for="issue-duration-years">Годы</label>
+							<input
+								type="number"
+								id="issue-duration-years"
+								value="0"
+								min="0"
+								max="99"
+								class="migration-input-number"
+							/>
+						</div>
+					</div>
+					<label class="issue-duration-toggle">
+						<input type="checkbox" id="issue-unlimited" onchange="issueDurationSync()" />
+						<span>Безлимит</span>
+					</label>
+					<p class="migration-hint" style="margin-top: 8px;">
+						Месяцы и годы считаются календарно. Можно комбинировать дни, месяцы и годы.
+					</p>
+				</div>
+
+				<div class="form-group">
+					<label for="issue-mode">Режим</label>
+					<select id="issue-mode" class="migration-select">
+						<option value="new">Выдать новый ключ</option>
+						<option value="replace">Заменить существующий на этом хосте</option>
+					</select>
+					<p class="migration-hint" style="margin-top: 6px;">
+						В режиме замены старый ключ на выбранном хосте архивируется после успешной выдачи нового.
+					</p>
+				</div>
+
+				<div class="form-group">
+					<label class="migration-hint" style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+						<input type="checkbox" id="issue-send-message" checked />
+						Отправить уведомление в Telegram
+					</label>
+				</div>
+			</div>
+
+				<div class="issue-section">
+					<h2>Текст уведомления</h2>
+					<p class="migration-hint">
+						Плейсхолдеры: <code>{host}</code>, <code>{expiry}</code>, <code>{key}</code>, <code>{email}</code>, <code>{key_id}</code>, <code>{whitelist_policy}</code>
+					</p>
+				<textarea id="issue-message-text" rows="12" class="migration-textarea">{{ issue_notification_template }}</textarea>
+			</div>
+
+				<div class="migration-actions">
+					<button type="button" id="issue-btn-execute" class="button button-success" onclick="issueByIdExecute()">
+						Выдать ключ
+					</button>
+				</div>
+		</div>
+
+		<div class="issue-panel">
+			<div class="issue-section">
+				<h2>Результат</h2>
+
+				<div id="issue-status" class="migration-status" hidden>
+					<div id="issue-status-text" class="migration-status-text" aria-live="polite"></div>
+				</div>
+
+				<div id="issue-result" class="issue-result" hidden>
+					<div class="issue-result-grid">
+						<div class="issue-result-item">
+							<span class="issue-result-label">Telegram ID</span>
+							<span id="issue-result-telegram-id" class="issue-result-value">—</span>
+						</div>
+						<div class="issue-result-item">
+							<span class="issue-result-label">Хост</span>
+							<span id="issue-result-host" class="issue-result-value">—</span>
+						</div>
+						<div class="issue-result-item">
+							<span class="issue-result-label">Email ключа</span>
+							<span id="issue-result-email" class="issue-result-value">—</span>
+						</div>
+						<div class="issue-result-item">
+							<span class="issue-result-label">Бот</span>
+							<span id="issue-result-bot-source" class="issue-result-value">—</span>
+						</div>
+						<div class="issue-result-item">
+							<span class="issue-result-label">Тариф</span>
+							<span id="issue-result-subscription-tier" class="issue-result-value">—</span>
+						</div>
+						<div class="issue-result-item">
+							<span class="issue-result-label">Срок до</span>
+							<span id="issue-result-expiry" class="issue-result-value">—</span>
+						</div>
+						<div class="issue-result-item">
+							<span class="issue-result-label">Режим</span>
+							<span id="issue-result-mode" class="issue-result-value">—</span>
+						</div>
+						<div class="issue-result-item">
+							<span class="issue-result-label">Уведомление</span>
+							<span id="issue-result-notify" class="issue-result-value">—</span>
+						</div>
+					</div>
+
+					<div class="form-group" style="margin-top: 14px;">
+						<label for="issue-result-key">Ключ</label>
+						<textarea id="issue-result-key" rows="4" class="migration-textarea" readonly></textarea>
+					</div>
+
+					<div class="migration-actions">
+						<button type="button" id="issue-btn-copy-key" class="button button-primary" onclick="issueByIdCopyKey()">
+							Скопировать ключ
+						</button>
+					</div>
+				</div>
+
+				<div id="issue-empty" class="migration-empty">
+					Заполните форму слева и нажмите «Выдать ключ».
+				</div>
+			</div>
+		</div>
+	</div>
+
+	<div id="issue-keys-modal" class="issue-keys-modal-overlay" hidden>
+		<div
+			class="issue-keys-modal"
+			role="dialog"
+			aria-modal="true"
+			aria-labelledby="issue-keys-modal-title"
+			aria-describedby="issue-keys-modal-user issue-keys-modal-status"
+			tabindex="-1"
+		>
+			<div class="issue-keys-modal-header">
+				<h3 id="issue-keys-modal-title">Ключи пользователя</h3>
+				<button type="button" id="issue-keys-modal-close" class="button button-secondary" onclick="issueByIdCloseKeysModal()">Закрыть</button>
+			</div>
+			<div id="issue-keys-modal-status" class="migration-status-text" style="margin-bottom: 8px;" aria-live="polite"></div>
+			<div id="issue-keys-modal-user" class="migration-hint" style="margin-bottom: 10px;"></div>
+			<div class="migration-table-wrap">
+				<table class="migration-table">
+					<thead>
+						<tr>
+							<th>ID</th>
+							<th>Хост</th>
+							<th>Email</th>
+							<th>Срок</th>
+							<th>Статус</th>
+							<th>Действия</th>
+						</tr>
+					</thead>
+					<tbody id="issue-keys-modal-body"></tbody>
+				</table>
+			</div>
+		</div>
+	</div>
+</section>
+
+<section
+	id="migration-panel-marketing"
+	class="migration-tab-panel"
+	data-migration-panel="marketing"
+	role="tabpanel"
+	aria-labelledby="migration-tab-marketing"
+	hidden
+>
+	<p class="settings-page-intro">
+		Массовая маркетинговая выдача: выбираете сегмент пользователей, хост выдачи и запускаете кампанию.
+	</p>
+
+	<div class="migration-layout">
+		<div class="migration-form-panel">
+			<div class="migration-section">
+				<h2>Параметры выдачи кампании</h2>
+
+				<div class="form-group">
+					<label for="mk-segment">Сегмент</label>
+					<select id="mk-segment" class="migration-select">
+						<option value="standard">Только стандартные</option>
+						<option value="super">Только супер</option>
+						<option value="all">Стандартные + супер</option>
+					</select>
+				</div>
+
+				<div class="form-group">
+					<label for="mk-target-host">Хост выдачи (куда создать ключи)</label>
+					<select id="mk-target-host" class="migration-select">
+						<option value="">— выберите —</option>
+						{% for host in hosts %}
+						<option value="{{ host.host_name }}" title="{{ host.host_url }}">{{ host.host_name }}</option>
+						{% endfor %}
+					</select>
+				</div>
+
+				<div class="form-group">
+					<label for="mk-subscription-tier">Тариф новых ключей</label>
+					<select id="mk-subscription-tier" class="migration-select">
+						<option value="super" selected>Супер</option>
+						<option value="standard">Стандарт</option>
+					</select>
+					<p class="migration-hint" style="margin-top: 6px;">
+						Супер: WHITELIST — 40 ГБ/мес. Стандарт: WHITELIST — 5 ГБ/мес. Остальные серверы — безлимитные.
+					</p>
+				</div>
+
+				<div class="form-group">
+					<label for="mk-gift-days">Подарочные дни</label>
+					<input type="number" id="mk-gift-days" value="0" min="0" max="365" class="migration-input-number" />
+				</div>
+
+				<div class="form-group">
+					<label class="migration-hint" style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+						<input type="checkbox" id="mk-keep-old-keys" checked />
+						Не удалять старые ключи
+					</label>
+					<p class="migration-hint">
+						Если снять галочку, старый ключ будет удалён из панели и бота только после успешной выдачи нового.
+					</p>
+				</div>
+
+				<div class="form-group">
+					<label for="mk-incident-id">ID кампании</label>
+					<input type="text" id="mk-incident-id" value="" placeholder="MARKETING-2026-04-09" class="migration-input" />
+				</div>
+
+				<div class="form-group">
+					<label for="mk-bot-source">От какого бота отправлять уведомления</label>
+					<select id="mk-bot-source" class="migration-select">
+						<option value="main" {% if runtime_bot_source != 'reserve' %}selected{% endif %}>Основной</option>
+						<option value="reserve" {% if runtime_bot_source == 'reserve' %}selected{% endif %}>Резервный</option>
+					</select>
+				</div>
+
+				<div class="form-group">
+					<label class="migration-hint" style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+						<input type="checkbox" id="mk-send-notify" checked />
+						Отправить уведомления в Telegram
+					</label>
+				</div>
+			</div>
+
+			<div class="migration-section">
+				<h2>Текст уведомления</h2>
+				<p class="migration-hint">
+					Плейсхолдеры: <code>{host}</code>, <code>{segment}</code>, <code>{expiry}</code>, <code>{email}</code>, <code>{key}</code>
+				</p>
+				<textarea id="mk-notification-text" rows="8" class="migration-textarea">🎁 <b>Подарочный ключ готов</b>
+
+Хост: <b>{host}</b>
+Сегмент: <b>{segment}</b>
+Срок до: <b>{expiry}</b>
+Email: <code>{email}</code>
+
+<pre>{key}</pre></textarea>
+			</div>
+
+			<div class="migration-actions">
+				<button type="button" id="mk-btn-preview" class="button button-primary" onclick="marketingPreview()">
+					Превью (dry-run)
+				</button>
+				<button type="button" id="mk-btn-execute" class="button button-success" onclick="marketingExecute()" disabled>
+					Запустить выдачу
+				</button>
+			</div>
+		</div>
+
+		<div class="migration-results-panel">
+			<div class="migration-section">
+				<h2>Результат кампании</h2>
+
+				<div id="mk-status" class="migration-status" hidden>
+					<div id="mk-status-text" class="migration-status-text"></div>
+					<div id="mk-progress-wrap" class="migration-progress-wrap" hidden>
+						<div id="mk-progress-bar" class="migration-progress-bar"></div>
+					</div>
+					<div id="mk-progress-detail" class="migration-progress-detail"></div>
+				</div>
+
+				<div id="mk-summary" class="migration-summary" hidden>
+					<div class="migration-summary-grid">
+						<div class="migration-summary-item">
+							<span class="migration-summary-label">Всего пользователей</span>
+							<span id="mk-sum-total" class="migration-summary-value">0</span>
+						</div>
+						<div class="migration-summary-item migration-summary-ok">
+							<span class="migration-summary-label">Выдано</span>
+							<span id="mk-sum-issued" class="migration-summary-value">0</span>
+						</div>
+						<div class="migration-summary-item migration-summary-ok">
+							<span class="migration-summary-label">Удалено старых</span>
+							<span id="mk-sum-deleted" class="migration-summary-value">0</span>
+						</div>
+						<div class="migration-summary-item migration-summary-skip">
+							<span class="migration-summary-label">Пропущено</span>
+							<span id="mk-sum-skipped" class="migration-summary-value">0</span>
+						</div>
+						<div class="migration-summary-item migration-summary-err">
+							<span class="migration-summary-label">Ошибки</span>
+							<span id="mk-sum-errors" class="migration-summary-value">0</span>
+						</div>
+						<div class="migration-summary-item migration-summary-err">
+							<span class="migration-summary-label">Ошибки удаления</span>
+							<span id="mk-sum-delete-errors" class="migration-summary-value">0</span>
+						</div>
+						<div class="migration-summary-item">
+							<span class="migration-summary-label">Уведомлений</span>
+							<span id="mk-sum-sent" class="migration-summary-value">0</span>
+						</div>
+					</div>
+				</div>
+
+				<div id="mk-table-wrap" class="migration-table-wrap" hidden>
+					<table class="migration-table">
+						<thead>
+							<tr>
+								<th>User ID</th>
+								<th>Источник</th>
+								<th>Email источника</th>
+								<th>Осталось</th>
+								<th>Подарок</th>
+								<th>Новый срок</th>
+								<th>Статус</th>
+							</tr>
+						</thead>
+						<tbody id="mk-table-body"></tbody>
+					</table>
+				</div>
+
+				<div id="mk-empty" class="migration-empty">
+					Сделайте превью, чтобы увидеть пользователей для маркетинговой выдачи.
+				</div>
+			</div>
+		</div>
+	</div>
+	</section>
+
+	<section
+		id="migration-panel-inbounds"
+		class="migration-tab-panel"
+		data-migration-panel="inbounds"
+		role="tabpanel"
+		aria-labelledby="migration-tab-inbounds"
+		hidden
+	>
+		<p class="settings-page-intro">
+			Синхронизация активных клиентов MainPanel с новыми inbound-ами панели.
+		</p>
+
+		<div class="migration-layout">
+			<div class="migration-form-panel">
+				<div class="migration-section">
+					<h2>Параметры sync</h2>
+
+					<div class="form-group">
+						<label for="inb-host">Host</label>
+						<select id="inb-host" class="migration-select">
+							<option value="">MainPanel из настроек</option>
+							{% for host in hosts %}
+							<option value="{{ host.host_name }}" title="{{ host.host_url }}">{{ host.host_name }}</option>
+							{% endfor %}
+						</select>
+					</div>
+
+					<div class="form-group">
+						<label for="inb-batch-limit">Batch limit</label>
+						<input type="number" id="inb-batch-limit" value="100" min="0" max="500" class="migration-input-number" />
+					</div>
+				</div>
+
+				<div class="migration-actions">
+					<button type="button" id="inb-btn-preview" class="button button-primary" onclick="mainpanelInboundPreview()">
+						Превью (dry-run)
+					</button>
+					<button type="button" id="inb-btn-execute" class="button button-success" onclick="mainpanelInboundExecute()" disabled>
+						Запустить sync
+					</button>
+				</div>
+			</div>
+
+			<div class="migration-results-panel">
+				<div class="migration-section">
+					<h2>Результат sync</h2>
+
+					<div id="inb-status" class="migration-status" hidden>
+						<div id="inb-status-text" class="migration-status-text"></div>
+						<div id="inb-progress-wrap" class="migration-progress-wrap" hidden>
+							<div id="inb-progress-bar" class="migration-progress-bar"></div>
+						</div>
+						<div id="inb-progress-detail" class="migration-progress-detail"></div>
+					</div>
+
+					<div id="inb-summary" class="migration-summary" hidden>
+						<div class="migration-summary-grid">
+							<div class="migration-summary-item">
+								<span class="migration-summary-label">Ключей</span>
+								<span id="inb-sum-total" class="migration-summary-value">0</span>
+							</div>
+							<div class="migration-summary-item migration-summary-ok">
+								<span class="migration-summary-label">К добавлению</span>
+								<span id="inb-sum-updated" class="migration-summary-value">0</span>
+							</div>
+							<div class="migration-summary-item migration-summary-skip">
+								<span class="migration-summary-label">Пропущено</span>
+								<span id="inb-sum-skipped" class="migration-summary-value">0</span>
+							</div>
+							<div class="migration-summary-item migration-summary-skip">
+								<span class="migration-summary-label">Ручная проверка</span>
+								<span id="inb-sum-review" class="migration-summary-value">0</span>
+							</div>
+							<div class="migration-summary-item migration-summary-err">
+								<span class="migration-summary-label">Ошибки</span>
+								<span id="inb-sum-failed" class="migration-summary-value">0</span>
+							</div>
+							<div class="migration-summary-item">
+								<span class="migration-summary-label">Новых inbound</span>
+								<span id="inb-sum-new" class="migration-summary-value">0</span>
+							</div>
+						</div>
+					</div>
+
+					<div id="inb-table-wrap" class="migration-table-wrap" hidden>
+						<table class="migration-table">
+							<thead>
+								<tr>
+									<th>User ID</th>
+									<th>Email</th>
+									<th>Inbound</th>
+									<th>Класс</th>
+									<th>Тариф</th>
+									<th>Статус</th>
+								</tr>
+							</thead>
+							<tbody id="inb-table-body"></tbody>
+						</table>
+					</div>
+
+					<div id="inb-empty" class="migration-empty">
+						Запустите превью чтобы увидеть план sync.
+					</div>
+				</div>
+			</div>
+		</div>
+	</section>
+
+	<section
+		id="migration-panel-trial-reset"
+		class="migration-tab-panel"
+		data-migration-panel="trial-reset"
+		role="tabpanel"
+		aria-labelledby="migration-tab-trial-reset"
+		hidden
+	>
+		<p class="settings-page-intro">
+			Сброс флагов обычного и Super trial для пользователя по Telegram username.
+		</p>
+
+		<div class="migration-layout">
+			<div class="migration-form-panel">
+				<div class="migration-section">
+					<h2>Параметры сброса</h2>
+
+					<div class="form-group">
+						<label for="trial-reset-username">Username</label>
+						<input
+							type="text"
+							id="trial-reset-username"
+							class="migration-input"
+							placeholder="noname_hui"
+							autocomplete="off"
+						/>
+					</div>
+				</div>
+
+				<div class="migration-actions">
+					<button type="button" id="trial-reset-btn-execute" class="button button-success" onclick="trialResetExecute()">
+						Сбросить триалы
+					</button>
+				</div>
+			</div>
+
+			<div class="migration-results-panel">
+				<div class="migration-section">
+					<h2>Результат сброса</h2>
+
+					<div id="trial-reset-status" class="migration-status" hidden>
+						<div id="trial-reset-status-text" class="migration-status-text" aria-live="polite"></div>
+					</div>
+
+					<div id="trial-reset-result" class="issue-result" hidden>
+						<div class="issue-result-grid">
+							<div class="issue-result-item">
+								<span class="issue-result-label">Telegram ID</span>
+								<span id="trial-reset-result-telegram-id" class="issue-result-value">—</span>
+							</div>
+							<div class="issue-result-item">
+								<span class="issue-result-label">Username</span>
+								<span id="trial-reset-result-username" class="issue-result-value">—</span>
+							</div>
+							<div class="issue-result-item">
+								<span class="issue-result-label">Обычный trial</span>
+								<span id="trial-reset-result-standard" class="issue-result-value">—</span>
+							</div>
+							<div class="issue-result-item">
+								<span class="issue-result-label">Super trial</span>
+								<span id="trial-reset-result-super" class="issue-result-value">—</span>
+							</div>
+						</div>
+					</div>
+
+					<div id="trial-reset-empty" class="migration-empty">
+						Введите username и нажмите «Сбросить триалы».
+					</div>
+				</div>
+			</div>
+		</div>
+	</section>
+
+	{% endblock %}
