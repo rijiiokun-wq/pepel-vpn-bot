@@ -8,6 +8,31 @@ Subscription identity handling was hardened during preparation and is covered
 by regression tests. Read [KNOWN_ISSUES.md](KNOWN_ISSUES.md) for compatibility
 limits, recovery behavior and the scope of offline validation.
 
+## Community purpose and service usage
+
+PEPEL VPN aims to help people in border regions stay in touch with loved ones
+and access information amid recurrent shelling and internet restrictions
+imposed by Roskomnadzor. The open-source code supports the service's
+subscription management and maintenance.
+
+As of 2026-10-28, the service maintainer reports **approximately 2,000 active
+VPN service users**. This is an approximate, maintainer-reported service
+figure. Its reporting period and counting method have not yet been documented.
+Independent installations of the open-source software have not yet been
+measured.
+
+Evidence available for review includes the public source, GPLv3 attribution,
+[passing offline CI](https://github.com/rijiiokun-wq/pepel-vpn-bot/actions/runs/40488110304),
+and the regression tests. These demonstrate the software's maintenance and
+test coverage; they do not independently verify the service-user estimate.
+Only aggregated usage figures will be published.
+
+If you independently install this software, you can help document its usefulness
+by opening a GitHub issue describing your setup, a successful installation, or a
+reproducible problem. Share your experience only with information you consent
+to make public, and use synthetic or redacted examples without customer data,
+credentials or complete subscription links.
+
 ## What is included
 
 - Telegram purchase, renewal, trial, referral, and support flows.
