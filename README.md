@@ -16,8 +16,9 @@ imposed by Roskomnadzor. The open-source code supports the service's
 subscription management and maintenance.
 
 As of 2026-10-28, the service maintainer reports **approximately 2,000 active
-VPN service users**. This is an approximate, maintainer-reported service
-figure. Its reporting period and counting method have not yet been documented.
+currently active service customers**. This is a point-in-time,
+maintainer-reported estimate of current customers, rather than a monthly
+visitor count. The underlying counting method has not yet been documented.
 Independent installations of the open-source software have not yet been
 measured.
 
